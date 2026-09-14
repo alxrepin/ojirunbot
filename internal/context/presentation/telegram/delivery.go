@@ -73,6 +73,7 @@ func callbackMessage(cb tg.CallbackQuery) botMessage {
 func withEphemeral(opts *tg.SendOptions, receiver int64) *tg.SendOptions {
 	copied := copyOptions(opts)
 	copied.Ephemeral = &tg.EphemeralMessageParameters{ReceiverUserID: receiver}
+	copied.ReplyParameters = nil
 	return copied
 }
 

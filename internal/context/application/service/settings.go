@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -11,7 +12,16 @@ import (
 	"ojirun/internal/context/domain"
 )
 
-var settingsSteps = []string{"sex", "weight", "calories", "protein", "fat", "carbs"}
+const (
+	SettingsMenuStep      = "menu"
+	SettingsChoiceAll     = "all"
+	SettingsChoiceTargets = "targets"
+)
+
+var (
+	settingsSteps       = []string{"sex", "weight", "calories", "protein", "fat", "carbs"}
+	settingsTargetSteps = []string{"calories", "protein", "fat", "carbs"}
+)
 
 type settingsUsers interface {
 	GetByTelegramID(ctx context.Context, telegramUserID int64) (domain.User, error)
@@ -24,6 +34,7 @@ type settingsProfiles interface {
 
 type SettingsOutcome struct {
 	Step      string
+	Fields    []string
 	Invalid   bool
 	Saved     bool
 	Cancelled bool
@@ -34,6 +45,14 @@ type SettingsOutcome struct {
 type settingsPayload struct {
 	Current domain.ProfileSettings `json:"current"`
 	Draft   domain.ProfileSettings `json:"draft"`
+	Fields  []string               `json:"fields,omitempty"`
+}
+
+func (p settingsPayload) fields() []string {
+	if len(p.Fields) == 0 {
+		return settingsSteps
+	}
+	return p.Fields
 }
 
 type Settings struct {
@@ -57,10 +76,10 @@ func (s *Settings) Begin(ctx context.Context, telegramUserID, chatID int64) (Set
 	}
 	current := profile.Settings()
 	payload := settingsPayload{Current: current, Draft: current}
-	if _, err := s.sessions.Start(ctx, domain.SessionSettings, telegramUserID, chatID, settingsSteps[0], payload); err != nil {
+	if _, err := s.sessions.Start(ctx, domain.SessionSettings, telegramUserID, chatID, SettingsMenuStep, payload); err != nil {
 		return SettingsOutcome{}, err
 	}
-	return SettingsOutcome{Step: settingsSteps[0], Current: current, Draft: current}, nil
+	return SettingsOutcome{Step: SettingsMenuStep, Current: current, Draft: current}, nil
 }
 
 func (s *Settings) ActiveSession(ctx context.Context, telegramUserID, chatID int64) (domain.Session, error) {
@@ -71,10 +90,20 @@ func (s *Settings) BindMessage(ctx context.Context, telegramUserID, chatID, botM
 	return s.sessions.SetBotMessage(ctx, domain.SessionSettings, telegramUserID, chatID, botMessageID)
 }
 
+func (s *Settings) Select(ctx context.Context, session domain.Session, choice string) (SettingsOutcome, error) {
+	fields, ok := settingsChoiceFields(choice)
+	if session.Step != SettingsMenuStep || !ok {
+		return SettingsOutcome{}, nil
+	}
+	payload := decodeSettingsPayload(session)
+	payload.Fields = fields
+	return s.moveTo(ctx, session, payload, fields[0])
+}
+
 func (s *Settings) SubmitText(ctx context.Context, session domain.Session, text string) (SettingsOutcome, error) {
 	payload := decodeSettingsPayload(session)
-	if !applySettingsText(session.Step, text, &payload.Draft) {
-		return SettingsOutcome{Step: session.Step, Invalid: true, Current: payload.Current, Draft: payload.Draft}, nil
+	if session.Step == SettingsMenuStep || !applySettingsText(session.Step, text, &payload.Draft) {
+		return SettingsOutcome{Step: session.Step, Fields: payload.fields(), Invalid: true, Current: payload.Current, Draft: payload.Draft}, nil
 	}
 	return s.advance(ctx, session, payload)
 }
@@ -93,7 +122,7 @@ func (s *Settings) Choose(ctx context.Context, session domain.Session, step, val
 }
 
 func (s *Settings) Keep(ctx context.Context, session domain.Session, step string) (SettingsOutcome, error) {
-	if session.Step != step {
+	if session.Step != step || step == SettingsMenuStep {
 		return SettingsOutcome{}, nil
 	}
 	return s.advance(ctx, session, decodeSettingsPayload(session))
@@ -109,15 +138,19 @@ func (s *Settings) Cancel(ctx context.Context, session domain.Session) (Settings
 }
 
 func (s *Settings) advance(ctx context.Context, session domain.Session, payload settingsPayload) (SettingsOutcome, error) {
-	next := nextSettingsStep(session.Step)
+	next := nextSettingsStep(payload.fields(), session.Step)
 	if next == "" {
 		return s.save(ctx, session, payload)
 	}
+	return s.moveTo(ctx, session, payload, next)
+}
+
+func (s *Settings) moveTo(ctx context.Context, session domain.Session, payload settingsPayload, next string) (SettingsOutcome, error) {
 	advanced, err := s.sessions.Advance(ctx, session.ID, session.Step, next, payload)
 	if err != nil || !advanced {
 		return SettingsOutcome{}, err
 	}
-	return SettingsOutcome{Step: next, Current: payload.Current, Draft: payload.Draft}, nil
+	return SettingsOutcome{Step: next, Fields: payload.fields(), Current: payload.Current, Draft: payload.Draft}, nil
 }
 
 func (s *Settings) save(ctx context.Context, session domain.Session, payload settingsPayload) (SettingsOutcome, error) {
@@ -140,13 +173,26 @@ func (s *Settings) save(ctx context.Context, session domain.Session, payload set
 	if err := s.profiles.Save(ctx, updated); err != nil {
 		return SettingsOutcome{}, err
 	}
-	return SettingsOutcome{Saved: true, Current: payload.Current, Draft: updated.Settings()}, nil
+	return SettingsOutcome{Saved: true, Fields: payload.fields(), Current: payload.Current, Draft: updated.Settings()}, nil
 }
 
-func nextSettingsStep(step string) string {
-	for i, candidate := range settingsSteps {
-		if candidate == step && i+1 < len(settingsSteps) {
-			return settingsSteps[i+1]
+func settingsChoiceFields(choice string) ([]string, bool) {
+	switch choice {
+	case SettingsChoiceAll:
+		return settingsSteps, true
+	case SettingsChoiceTargets:
+		return settingsTargetSteps, true
+	}
+	if slices.Contains(settingsSteps, choice) {
+		return []string{choice}, true
+	}
+	return nil, false
+}
+
+func nextSettingsStep(fields []string, step string) string {
+	for i, candidate := range fields {
+		if candidate == step && i+1 < len(fields) {
+			return fields[i+1]
 		}
 	}
 	return ""

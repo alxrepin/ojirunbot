@@ -34,6 +34,10 @@ func (r *Router) handleCallback(ctx context.Context, cb tg.CallbackQuery) {
 		return
 	}
 
+	if cb.Data == tg.ProfileSettingsCallback || cb.Data == tg.ProfileRestartCallback {
+		r.handleProfileCallback(ctx, cb)
+		return
+	}
 	if reg, ok := tg.DecodeRegCallback(cb.Data); ok {
 		r.handleRegistrationCallback(ctx, cb, reg)
 		return

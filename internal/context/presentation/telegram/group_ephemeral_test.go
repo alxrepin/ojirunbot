@@ -39,8 +39,8 @@ func TestGroupMealStatusIsEphemeral(t *testing.T) {
 	if opts.Ephemeral == nil || opts.Ephemeral.ReceiverUserID != 42 {
 		t.Fatalf("status must be ephemeral for the author, got %+v", opts)
 	}
-	if opts.ReplyParameters == nil || opts.ReplyParameters.MessageID != 2 {
-		t.Fatalf("status should reply to the food message, got %+v", opts.ReplyParameters)
+	if opts.ReplyParameters != nil {
+		t.Fatalf("ephemeral status must not quote the food message, got %+v", opts.ReplyParameters)
 	}
 }
 

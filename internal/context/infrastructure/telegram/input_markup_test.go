@@ -24,6 +24,40 @@ func TestSettingsKeyboard(t *testing.T) {
 	}
 }
 
+func TestSettingsMenuKeyboard(t *testing.T) {
+	rows := SettingsMenuKeyboard().InlineKeyboard
+	var values []string
+	for _, row := range rows {
+		for _, button := range row {
+			got, ok := DecodeSettingsCallback(button.CallbackData)
+			if !ok || got.Step != SettingsMenuStep {
+				t.Fatalf("menu button %#v decoded to %#v, %v", button, got, ok)
+			}
+			values = append(values, got.Value)
+		}
+	}
+	want := []string{"sex", "weight", "calories", "protein", "fat", "carbs", SettingsTargets, SettingsAll, SettingsCancel}
+	if len(values) != len(want) {
+		t.Fatalf("menu values = %v, want %v", values, want)
+	}
+	for i := range want {
+		if values[i] != want[i] {
+			t.Fatalf("menu values = %v, want %v", values, want)
+		}
+	}
+	all, cancel := rows[len(rows)-2][0], rows[len(rows)-1][0]
+	if all.Style != ButtonStyleSuccess || cancel.Style != ButtonStyleDanger {
+		t.Fatalf("configure-all should be green and cancel red, got %#v %#v", all, cancel)
+	}
+}
+
+func TestProfileKeyboard(t *testing.T) {
+	rows := ProfileKeyboard().InlineKeyboard
+	if len(rows) != 2 || rows[0][0].CallbackData != ProfileSettingsCallback || rows[1][0].CallbackData != ProfileRestartCallback {
+		t.Fatalf("profile keyboard = %#v", rows)
+	}
+}
+
 func TestMealInputKeyboard(t *testing.T) {
 	button := MealInputKeyboard("5f0c").InlineKeyboard[0][0]
 	if button.Style != ButtonStyleDanger {

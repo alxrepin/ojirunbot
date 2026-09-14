@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -254,8 +255,6 @@ func Profile(profile domain.Profile) string {
 	}
 	b.WriteString("\n")
 	b.WriteString(targetLines(profile.DailyCaloriesKCal, profile.DailyProteinG, profile.DailyFatG, profile.DailyCarbsG))
-	b.WriteString("\n⚙️ Изменить вес, пол или норму КБЖУ — /settings.")
-	b.WriteString("\n♻️ Пересчитать профиль заново — /start.")
 	return b.String()
 }
 
@@ -287,9 +286,11 @@ func MealInputCancelled() string {
 	return "Добавление отменено."
 }
 
-var settingsFields = []struct {
+type settingsField struct {
 	key, label string
-}{
+}
+
+var settingsFields = []settingsField{
 	{"sex", "Пол"},
 	{"weight", "Вес"},
 	{"calories", "Калории"},
@@ -298,12 +299,44 @@ var settingsFields = []struct {
 	{"carbs", "Углеводы"},
 }
 
-func SettingsCard(step string, current, draft domain.ProfileSettings, invalid bool) string {
+func selectedSettingsFields(keys []string) []settingsField {
+	if len(keys) == 0 {
+		return settingsFields
+	}
+	selected := make([]settingsField, 0, len(keys))
+	for _, f := range settingsFields {
+		if slices.Contains(keys, f.key) {
+			selected = append(selected, f)
+		}
+	}
+	return selected
+}
+
+func SettingsMenu(current domain.ProfileSettings, invalid bool) string {
+	var b strings.Builder
+	b.WriteString("⚙️ <b>Настройки профиля</b>\n\n")
+	for _, f := range settingsFields {
+		fmt.Fprintf(&b, "• %s: <b>%s</b>\n", f.label, settingsFieldValue(f.key, current))
+	}
+	b.WriteString("\n")
+	if invalid {
+		b.WriteString("⚠️ <i>Сначала выберите кнопкой, что изменить.</i>\n\n")
+	}
+	b.WriteString("Что изменить? Выберите поле или настройте всё сразу 👇")
+	return b.String()
+}
+
+func SettingsCard(step string, fields []string, current, draft domain.ProfileSettings, invalid bool) string {
+	selected := selectedSettingsFields(fields)
 	var b strings.Builder
 	b.WriteString("⚙️ <b>Настройки профиля</b>\n")
-	b.WriteString("<i>Идём по полям по очереди: отправьте новое значение или оставьте текущее кнопкой.</i>\n\n")
+	if len(selected) > 1 {
+		b.WriteString("<i>Идём по полям по очереди: отправьте новое значение или оставьте текущее кнопкой.</i>\n\n")
+	} else {
+		b.WriteString("<i>Отправьте новое значение или оставьте текущее кнопкой.</i>\n\n")
+	}
 	reached := false
-	for _, f := range settingsFields {
+	for _, f := range selected {
 		now := settingsFieldValue(f.key, current)
 		switch {
 		case f.key == step:
@@ -327,10 +360,10 @@ func SettingsKeepLabel(step string, current domain.ProfileSettings) string {
 	return "Оставить текущее: " + settingsFieldValue(step, current)
 }
 
-func SettingsSaved(before, after domain.ProfileSettings) string {
+func SettingsSaved(fields []string, before, after domain.ProfileSettings) string {
 	var b strings.Builder
 	b.WriteString("✅ <b>Настройки сохранены</b>\n\n")
-	for _, f := range settingsFields {
+	for _, f := range selectedSettingsFields(fields) {
 		b.WriteString("• " + settingsChange(f.label, settingsFieldValue(f.key, before), settingsFieldValue(f.key, after)) + "\n")
 	}
 	if after.TargetsDiffer(before) {

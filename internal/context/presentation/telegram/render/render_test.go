@@ -186,7 +186,7 @@ func TestSettingsCardShowsProgressAndCurrentValues(t *testing.T) {
 	current := domain.ProfileSettings{Sex: "male", WeightKG: 80, CaloriesKCal: 2600, ProteinG: 128, FatG: 81, CarbsG: 350}
 	draft := current
 	draft.WeightKG = 78.5
-	card := SettingsCard("calories", current, draft, false)
+	card := SettingsCard("calories", allSettingsFields, current, draft, false)
 	for _, want := range []string{
 		"✅ Пол: <b>Мужской</b>\n",
 		"✅ Вес: <b>78.5 кг</b> <i>(было 80 кг)</i>",
@@ -203,16 +203,45 @@ func TestSettingsCardShowsProgressAndCurrentValues(t *testing.T) {
 	}
 }
 
+var allSettingsFields = []string{"sex", "weight", "calories", "protein", "fat", "carbs"}
+
+func TestSettingsMenuListsCurrentValues(t *testing.T) {
+	current := domain.ProfileSettings{Sex: "female", WeightKG: 61.5, CaloriesKCal: 1900, ProteinG: 110, FatG: 60, CarbsG: 210}
+	menu := SettingsMenu(current, false)
+	for _, want := range []string{"• Пол: <b>Женский</b>", "• Вес: <b>61.5 кг</b>", "• Углеводы: <b>210 г</b>", "Что изменить?"} {
+		if !strings.Contains(menu, want) {
+			t.Fatalf("settings menu missing %q, got:\n%s", want, menu)
+		}
+	}
+	if strings.Contains(menu, "⚠️") || !strings.Contains(SettingsMenu(current, true), "⚠️") {
+		t.Fatal("only an invalid menu should carry the warning")
+	}
+}
+
+func TestSettingsSingleFieldCardAndSummary(t *testing.T) {
+	before := domain.ProfileSettings{Sex: "male", WeightKG: 80, CaloriesKCal: 2600, ProteinG: 128, FatG: 81, CarbsG: 350}
+	card := SettingsCard("weight", []string{"weight"}, before, before, false)
+	if !strings.Contains(card, "👉 <b>Вес</b>: сейчас 80 кг") || strings.Contains(card, "Калории") || strings.Contains(card, "по очереди") {
+		t.Fatalf("single field card should show only weight, got:\n%s", card)
+	}
+	after := before
+	after.WeightKG = 79
+	saved := SettingsSaved([]string{"weight"}, before, after)
+	if !strings.Contains(saved, "Вес: <b>79 кг</b> <i>(было 80 кг)</i>") || strings.Contains(saved, "Пол") {
+		t.Fatalf("summary should list only the edited field, got:\n%s", saved)
+	}
+}
+
 func TestSettingsSavedNotesManualTargets(t *testing.T) {
 	before := domain.ProfileSettings{Sex: "male", WeightKG: 80, CaloriesKCal: 2600, ProteinG: 128, FatG: 81, CarbsG: 350}
 	bodyOnly := before
 	bodyOnly.WeightKG = 79
-	if out := SettingsSaved(before, bodyOnly); strings.Contains(out, "вручную") {
+	if out := SettingsSaved(allSettingsFields, before, bodyOnly); strings.Contains(out, "вручную") {
 		t.Fatalf("unchanged targets should not be flagged manual:\n%s", out)
 	}
 	coach := before
 	coach.ProteinG = 160
-	out := SettingsSaved(before, coach)
+	out := SettingsSaved(allSettingsFields, before, coach)
 	if !strings.Contains(out, "Белки: <b>160 г</b> <i>(было 128 г)</i>") || !strings.Contains(out, "вручную") {
 		t.Fatalf("expected changed protein and manual note, got:\n%s", out)
 	}

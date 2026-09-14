@@ -48,8 +48,8 @@ tracks them against your daily target and sends you a breakdown of yesterday eve
 | `/start` | DM | onboarding and daily target calculation |
 | `/add` | DM, group | add a meal: with text or a photo — right away, without — waits for your next message |
 | `/stats` | DM, group | today's progress; in a group `/stats @username` shows a member who keeps a diary there |
-| `/profile` | DM | your data and daily target |
-| `/settings` | DM | manually change sex, weight and macro targets |
+| `/profile` | DM | your data and daily target, with buttons to edit or recalculate |
+| `/settings` | DM | pick what to change — sex, weight, one macro target, the whole target or everything |
 | `/yesterday` | DM, group | reply to a meal to move it to the previous day |
 | `/readd` | DM, group | reply to a meal message to analyze it again |
 | `/help` | DM, group | how it works |

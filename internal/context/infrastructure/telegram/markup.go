@@ -131,6 +131,27 @@ func SettingsKeyboard(step, keepLabel string) InlineKeyboardMarkup {
 	return InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
+func SettingsMenuKeyboard() InlineKeyboardMarkup {
+	choice := func(text, value, style string) InlineKeyboardButton {
+		return InlineKeyboardButton{Text: text, CallbackData: EncodeSettingsCallback(SettingsMenuStep, value), Style: style}
+	}
+	return InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{
+		{choice("Пол", "sex", ""), choice("Вес", "weight", "")},
+		{choice("Калории", "calories", ""), choice("Белки", "protein", "")},
+		{choice("Жиры", "fat", ""), choice("Углеводы", "carbs", "")},
+		{choice("🎯 Вся норма КБЖУ", SettingsTargets, "")},
+		{choice("Настроить всё", SettingsAll, ButtonStyleSuccess)},
+		{choice("Отмена", SettingsCancel, ButtonStyleDanger)},
+	}}
+}
+
+func ProfileKeyboard() InlineKeyboardMarkup {
+	return InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{
+		{{Text: "⚙️ Изменить данные", CallbackData: ProfileSettingsCallback}},
+		{{Text: "♻️ Пересчитать заново", CallbackData: ProfileRestartCallback}},
+	}}
+}
+
 func SubscribeKeyboard(channelURL string) InlineKeyboardMarkup {
 	return InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{
 		{{Text: "📢 Подписаться на канал", URL: channelURL}},

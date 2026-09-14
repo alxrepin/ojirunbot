@@ -108,7 +108,19 @@ func (r *Router) showProfile(ctx context.Context, msg tg.Message) {
 		}
 		return
 	}
-	_, _ = r.api.SendMessage(ctx, msg.Chat.ID, render.Profile(profile), withMenu(htmlOptions()))
+	_, _ = r.api.SendMessage(ctx, msg.Chat.ID, render.Profile(profile), &tg.SendOptions{ParseMode: "HTML", ReplyMarkup: tg.ProfileKeyboard()})
+}
+
+func (r *Router) handleProfileCallback(ctx context.Context, cb tg.CallbackQuery) {
+	if cb.Message.Chat.Type != "private" {
+		return
+	}
+	msg := tg.Message{From: &cb.From, Chat: cb.Message.Chat}
+	if cb.Data == tg.ProfileRestartCallback {
+		r.startRegistration(ctx, msg)
+		return
+	}
+	r.startSettings(ctx, msg)
 }
 
 func registrantInfo(u *tg.User) service.RegistrantInfo {

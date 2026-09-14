@@ -44,8 +44,11 @@ func DecodeRegCallback(data string) (RegCallback, bool) {
 const (
 	settingsPrefix = "set"
 
-	SettingsKeep   = "keep"
-	SettingsCancel = "cancel"
+	SettingsKeep     = "keep"
+	SettingsCancel   = "cancel"
+	SettingsMenuStep = "menu"
+	SettingsAll      = "all"
+	SettingsTargets  = "targets"
 )
 
 type SettingsCallback struct {
@@ -82,3 +85,8 @@ func splitCallback(data, prefix string) (string, string, bool) {
 }
 
 const SubscriptionCheckCallback = "sub:check"
+
+const (
+	ProfileSettingsCallback = "profile:settings"
+	ProfileRestartCallback  = "profile:restart"
+)

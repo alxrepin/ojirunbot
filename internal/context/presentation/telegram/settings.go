@@ -21,8 +21,7 @@ func (r *Router) startSettings(ctx context.Context, msg tg.Message) {
 		_, _ = r.api.SendMessage(ctx, msg.Chat.ID, render.SettingsError(), htmlOptions())
 		return
 	}
-	text := render.SettingsCard(outcome.Step, outcome.Current, outcome.Draft, false)
-	sent, err := r.api.SendMessage(ctx, msg.Chat.ID, text, settingsOptions(outcome))
+	sent, err := r.api.SendMessage(ctx, msg.Chat.ID, settingsText(outcome), settingsOptions(outcome))
 	if err != nil {
 		r.log.Error("send settings card failed", "error", err)
 		return
@@ -46,11 +45,13 @@ func (r *Router) handleSettingsCallback(ctx context.Context, cb tg.CallbackQuery
 	}
 
 	var outcome service.SettingsOutcome
-	switch action.Value {
-	case tg.SettingsCancel:
+	switch {
+	case action.Value == tg.SettingsCancel:
 		outcome, err = r.settings.Cancel(ctx, session)
-	case tg.SettingsKeep:
+	case action.Value == tg.SettingsKeep:
 		outcome, err = r.settings.Keep(ctx, session, action.Step)
+	case action.Step == tg.SettingsMenuStep:
+		outcome, err = r.settings.Select(ctx, session, action.Value)
 	default:
 		outcome, err = r.settings.Choose(ctx, session, action.Step, action.Value)
 	}
@@ -63,12 +64,11 @@ func (r *Router) renderSettings(ctx context.Context, telegramUserID, chatID, mes
 		r.log.Error("settings step failed", "error", err)
 		r.editCard(ctx, chatID, messageID, render.SettingsError(), htmlOptions(), nil)
 	case outcome.Saved:
-		r.editCard(ctx, chatID, messageID, render.SettingsSaved(outcome.Current, outcome.Draft), htmlOptions(), nil)
+		r.editCard(ctx, chatID, messageID, render.SettingsSaved(outcome.Fields, outcome.Current, outcome.Draft), htmlOptions(), nil)
 	case outcome.Cancelled:
 		r.editCard(ctx, chatID, messageID, render.SettingsCancelled(), htmlOptions(), nil)
 	case outcome.Step != "":
-		text := render.SettingsCard(outcome.Step, outcome.Current, outcome.Draft, outcome.Invalid)
-		r.editCard(ctx, chatID, messageID, text, settingsOptions(outcome), func(newID int64) {
+		r.editCard(ctx, chatID, messageID, settingsText(outcome), settingsOptions(outcome), func(newID int64) {
 			r.bindSettingsCard(ctx, telegramUserID, chatID, newID)
 		})
 	}
@@ -80,9 +80,17 @@ func (r *Router) bindSettingsCard(ctx context.Context, telegramUserID, chatID, m
 	}
 }
 
-func settingsOptions(outcome service.SettingsOutcome) *tg.SendOptions {
-	return &tg.SendOptions{
-		ParseMode:   "HTML",
-		ReplyMarkup: tg.SettingsKeyboard(outcome.Step, render.SettingsKeepLabel(outcome.Step, outcome.Current)),
+func settingsText(outcome service.SettingsOutcome) string {
+	if outcome.Step == service.SettingsMenuStep {
+		return render.SettingsMenu(outcome.Current, outcome.Invalid)
 	}
+	return render.SettingsCard(outcome.Step, outcome.Fields, outcome.Current, outcome.Draft, outcome.Invalid)
+}
+
+func settingsOptions(outcome service.SettingsOutcome) *tg.SendOptions {
+	markup := tg.SettingsMenuKeyboard()
+	if outcome.Step != service.SettingsMenuStep {
+		markup = tg.SettingsKeyboard(outcome.Step, render.SettingsKeepLabel(outcome.Step, outcome.Current))
+	}
+	return &tg.SendOptions{ParseMode: "HTML", ReplyMarkup: markup}
 }
