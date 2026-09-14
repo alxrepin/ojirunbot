@@ -121,7 +121,7 @@ func newInputRouter(api API, sessions *inputSessions) *Router {
 		fakeUsers{user: domain.User{ID: "u1", TelegramUserID: 42}},
 		fakeProfiles{profile: domain.Profile{UserID: "u1"}},
 		fakeMeals{entry: domain.MealEntry{ID: "m1", ChatID: -100, SourceMessageID: 2}},
-		0, time.UTC,
+		domain.MealLimits{}, time.UTC,
 	)
 	return &Router{
 		api:       api,

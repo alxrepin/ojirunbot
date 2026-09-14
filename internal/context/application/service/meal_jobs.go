@@ -44,12 +44,12 @@ func (m *MealJobs) OnEnqueue(wake func()) {
 	m.wake = wake
 }
 
-func (m *MealJobs) Backlog(ctx context.Context) (int, error) {
-	return m.queue.Backlog(ctx, domain.QueueMeal)
+func (m *MealJobs) Backlog(ctx context.Context, chatID int64) (int, error) {
+	return m.queue.Backlog(ctx, domain.QueueMeal, chatID)
 }
 
-func (m *MealJobs) EnqueueAnalysis(ctx context.Context, mealID string, photo domain.PhotoRef, description string) error {
-	return m.enqueue(ctx, domain.JobMealAnalysis, mealAnalysisPayload{
+func (m *MealJobs) EnqueueAnalysis(ctx context.Context, mealID string, chatID int64, photo domain.PhotoRef, description string) error {
+	return m.enqueue(ctx, domain.JobMealAnalysis, chatID, mealAnalysisPayload{
 		MealID:            mealID,
 		PhotoFileID:       photo.FileID,
 		PhotoFileUniqueID: photo.FileUniqueID,
@@ -57,12 +57,12 @@ func (m *MealJobs) EnqueueAnalysis(ctx context.Context, mealID string, photo dom
 	})
 }
 
-func (m *MealJobs) EnqueueCorrection(ctx context.Context, mealID, correction string) error {
-	return m.enqueue(ctx, domain.JobMealCorrection, mealCorrectionPayload{MealID: mealID, Correction: correction})
+func (m *MealJobs) EnqueueCorrection(ctx context.Context, mealID string, chatID int64, correction string) error {
+	return m.enqueue(ctx, domain.JobMealCorrection, chatID, mealCorrectionPayload{MealID: mealID, Correction: correction})
 }
 
-func (m *MealJobs) enqueue(ctx context.Context, kind string, payload any) error {
-	if err := m.queue.Enqueue(ctx, domain.QueueMeal, kind, payload, ""); err != nil {
+func (m *MealJobs) enqueue(ctx context.Context, kind string, chatID int64, payload any) error {
+	if err := m.queue.Enqueue(ctx, domain.QueueMeal, kind, payload, "", chatID); err != nil {
 		return err
 	}
 	if m.wake != nil {

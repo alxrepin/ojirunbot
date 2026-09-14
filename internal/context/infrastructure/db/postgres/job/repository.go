@@ -24,12 +24,12 @@ func NewRepository(c *postgres.Client) *Repository {
 	return &Repository{pool: c.Pool()}
 }
 
-func (r *Repository) Enqueue(ctx context.Context, queue, kind string, payload any, dedupeKey string) error {
+func (r *Repository) Enqueue(ctx context.Context, queue, kind string, payload any, dedupeKey string, chatID int64) error {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s job payload: %w", kind, err)
 	}
-	if _, err := r.pool.Exec(ctx, enqueueQuery, queue, kind, dedupeKey, payloadJSON); err != nil {
+	if _, err := r.pool.Exec(ctx, enqueueQuery, queue, kind, dedupeKey, payloadJSON, chatID); err != nil {
 		return fmt.Errorf("enqueue %s job: %w", kind, err)
 	}
 	return nil
@@ -37,8 +37,13 @@ func (r *Repository) Enqueue(ctx context.Context, queue, kind string, payload an
 
 func (r *Repository) Claim(ctx context.Context, queue string, lease time.Duration) (domain.Job, bool, error) {
 	var job domain.Job
-	err := r.pool.QueryRow(ctx, claimQuery, queue, lease.Seconds()).
-		Scan(&job.ID, &job.Queue, &job.Kind, &job.Payload, &job.Attempts, &job.MaxAttempts)
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, lockQueueQuery, queue); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, claimQuery, queue, lease.Seconds()).
+			Scan(&job.ID, &job.Queue, &job.Kind, &job.Payload, &job.Attempts, &job.MaxAttempts)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Job{}, false, nil
 	}
@@ -69,9 +74,9 @@ func (r *Repository) Fail(ctx context.Context, jobID, reason string) error {
 	return nil
 }
 
-func (r *Repository) Backlog(ctx context.Context, queue string) (int, error) {
+func (r *Repository) Backlog(ctx context.Context, queue string, chatID int64) (int, error) {
 	var count int
-	if err := r.pool.QueryRow(ctx, backlogQuery, queue).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, backlogQuery, queue, chatID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s backlog: %w", queue, err)
 	}
 	return count, nil

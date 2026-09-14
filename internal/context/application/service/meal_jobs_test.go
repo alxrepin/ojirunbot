@@ -57,10 +57,10 @@ func TestMealJobsEnqueueWakesWorkers(t *testing.T) {
 	jobs.OnEnqueue(func() { woken++ })
 
 	ctx := context.Background()
-	if err := jobs.EnqueueAnalysis(ctx, "m1", domain.PhotoRef{}, "омлет"); err != nil {
+	if err := jobs.EnqueueAnalysis(ctx, "m1", 42, domain.PhotoRef{}, "омлет"); err != nil {
 		t.Fatal(err)
 	}
-	if err := jobs.EnqueueCorrection(ctx, "m1", "без масла"); err != nil {
+	if err := jobs.EnqueueCorrection(ctx, "m1", 42, "без масла"); err != nil {
 		t.Fatal(err)
 	}
 	if woken != 2 || len(queue.enqueued) != 2 || queue.enqueued[1] != domain.JobMealCorrection {

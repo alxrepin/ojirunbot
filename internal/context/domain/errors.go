@@ -12,6 +12,8 @@ var (
 	ErrPhotoNotFound   = wrapNotFound("photo")
 
 	ErrDailyMealLimit = errors.New("daily meal limit reached")
+	ErrChatMealLimit  = errors.New("daily chat meal limit reached")
+	ErrMealsInFlight  = errors.New("too many meals in flight")
 )
 
 type notFoundError struct{ what string }

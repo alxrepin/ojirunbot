@@ -21,32 +21,53 @@ func NewRepository(c *postgres.Client) *Repository {
 	return &Repository{pool: c.Pool()}
 }
 
-func (r *Repository) CreateEntryWithinLimit(ctx context.Context, userID string, chatID, sourceMessageID int64, mealDate, since time.Time, limit int) (domain.MealEntry, error) {
+func (r *Repository) CreateEntryWithinLimit(ctx context.Context, userID string, chatID, sourceMessageID int64, mealDate, since time.Time, limits domain.MealLimits) (domain.MealEntry, error) {
 	var entry domain.MealEntry
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		if limit > 0 {
+		if limits.PerUserPerDay > 0 || limits.InFlight > 0 {
 			if _, err := tx.Exec(ctx, lockUserMealsQuery, userID); err != nil {
 				return err
 			}
-			var created int
-			if err := tx.QueryRow(ctx, countCreatedSinceQuery, userID, since).Scan(&created); err != nil {
+		}
+		if err := checkLimit(ctx, tx, limits.PerUserPerDay, domain.ErrDailyMealLimit, countCreatedSinceQuery, userID, since); err != nil {
+			return err
+		}
+		if err := checkLimit(ctx, tx, limits.InFlight, domain.ErrMealsInFlight, countInFlightQuery, userID); err != nil {
+			return err
+		}
+		if chatID < 0 && limits.PerChatPerDay > 0 {
+			if _, err := tx.Exec(ctx, lockChatMealsQuery, chatID); err != nil {
 				return err
 			}
-			if created >= limit {
-				return domain.ErrDailyMealLimit
+			if err := checkLimit(ctx, tx, limits.PerChatPerDay, domain.ErrChatMealLimit, countChatCreatedSinceQuery, chatID, since); err != nil {
+				return err
 			}
 		}
 		var err error
 		entry, err = scanCreatedEntry(tx.QueryRow(ctx, createEntryQuery, userID, chatID, sourceMessageID, mealDate))
 		return err
 	})
-	if errors.Is(err, domain.ErrDailyMealLimit) {
+	if errors.Is(err, domain.ErrDailyMealLimit) || errors.Is(err, domain.ErrMealsInFlight) || errors.Is(err, domain.ErrChatMealLimit) {
 		return domain.MealEntry{}, err
 	}
 	if err != nil {
 		return domain.MealEntry{}, fmt.Errorf("create meal entry: %w", err)
 	}
 	return entry, nil
+}
+
+func checkLimit(ctx context.Context, tx pgx.Tx, limit int, exceeded error, query string, args ...any) error {
+	if limit <= 0 {
+		return nil
+	}
+	var count int
+	if err := tx.QueryRow(ctx, query, args...).Scan(&count); err != nil {
+		return err
+	}
+	if count >= limit {
+		return exceeded
+	}
+	return nil
 }
 
 func (r *Repository) CountCreatedSince(ctx context.Context, userID string, since time.Time) (int, error) {

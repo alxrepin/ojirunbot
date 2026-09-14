@@ -18,6 +18,12 @@ type MealEntry struct {
 	CreatedAt          time.Time
 }
 
+type MealLimits struct {
+	PerUserPerDay int
+	PerChatPerDay int
+	InFlight      int
+}
+
 type Status string
 
 const (

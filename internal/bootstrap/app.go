@@ -67,6 +67,8 @@ func New(ctx context.Context) (*App, error) {
 		"meal_workers", cfg.MaxConcurrentAI,
 		"report_workers", cfg.ReportWorkers,
 		"max_meals_per_day", cfg.MaxMealsPerDay,
+		"max_meals_per_chat_per_day", cfg.MaxMealsPerChatPerDay,
+		"max_meals_in_flight", cfg.MaxMealsInFlight,
 		"log_level", cfg.LogLevel,
 	)
 	return app, nil

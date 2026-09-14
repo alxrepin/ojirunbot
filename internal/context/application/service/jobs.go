@@ -13,12 +13,12 @@ import (
 )
 
 type jobQueue interface {
-	Enqueue(ctx context.Context, queue, kind string, payload any, dedupeKey string) error
+	Enqueue(ctx context.Context, queue, kind string, payload any, dedupeKey string, chatID int64) error
 	Claim(ctx context.Context, queue string, lease time.Duration) (domain.Job, bool, error)
 	Complete(ctx context.Context, jobID string) error
 	Retry(ctx context.Context, jobID string, delay time.Duration, reason string) error
 	Fail(ctx context.Context, jobID string, reason string) error
-	Backlog(ctx context.Context, queue string) (int, error)
+	Backlog(ctx context.Context, queue string, chatID int64) (int, error)
 }
 
 type JobHandler func(ctx context.Context, job domain.Job) error

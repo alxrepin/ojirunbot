@@ -14,8 +14,8 @@ type countingMeals struct {
 	gotLimit int
 }
 
-func (c *countingMeals) CreateEntryWithinLimit(_ context.Context, _ string, _, _ int64, _, since time.Time, limit int) (domain.MealEntry, error) {
-	c.gotSince, c.gotLimit = since, limit
+func (c *countingMeals) CreateEntryWithinLimit(_ context.Context, _ string, _, _ int64, _, since time.Time, limits domain.MealLimits) (domain.MealEntry, error) {
+	c.gotSince, c.gotLimit = since, limits.PerUserPerDay
 	return domain.MealEntry{ID: "m1"}, nil
 }
 
@@ -33,7 +33,7 @@ func TestAddMealDailyLimit(t *testing.T) {
 	author := AuthorizedAuthor{User: domain.User{ID: "u1"}}
 
 	meals := &countingMeals{created: 9}
-	addMeal := NewAddMeal(nil, nil, meals, 10, loc)
+	addMeal := NewAddMeal(nil, nil, meals, domain.MealLimits{PerUserPerDay: 10}, loc)
 	if reached, err := addMeal.LimitReached(ctx, author); err != nil || reached {
 		t.Fatalf("9 of 10 meals: reached=%v err=%v", reached, err)
 	}
@@ -50,7 +50,7 @@ func TestAddMealDailyLimit(t *testing.T) {
 		t.Fatalf("CreateEntry must pass the limit to the repository (limit=%d, err=%v)", meals.gotLimit, err)
 	}
 
-	unlimited := NewAddMeal(nil, nil, &countingMeals{created: 1000}, 0, loc)
+	unlimited := NewAddMeal(nil, nil, &countingMeals{created: 1000}, domain.MealLimits{}, loc)
 	if reached, _ := unlimited.LimitReached(ctx, author); reached || unlimited.DailyLimit() != 0 {
 		t.Fatal("a zero limit disables the check")
 	}

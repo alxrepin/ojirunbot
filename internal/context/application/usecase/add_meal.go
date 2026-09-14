@@ -16,7 +16,7 @@ type profileReader interface {
 }
 
 type mealCreator interface {
-	CreateEntryWithinLimit(ctx context.Context, userID string, chatID, sourceMessageID int64, mealDate, since time.Time, limit int) (domain.MealEntry, error)
+	CreateEntryWithinLimit(ctx context.Context, userID string, chatID, sourceMessageID int64, mealDate, since time.Time, limits domain.MealLimits) (domain.MealEntry, error)
 	CountCreatedSince(ctx context.Context, userID string, since time.Time) (int, error)
 }
 
@@ -32,22 +32,26 @@ type AuthorizedAuthor struct {
 }
 
 type AddMeal struct {
-	users      userReader
-	profiles   profileReader
-	meals      mealCreator
-	dailyLimit int
-	loc        *time.Location
+	users    userReader
+	profiles profileReader
+	meals    mealCreator
+	limits   domain.MealLimits
+	loc      *time.Location
 }
 
-func NewAddMeal(users userReader, profiles profileReader, meals mealCreator, dailyLimit int, loc *time.Location) *AddMeal {
+func NewAddMeal(users userReader, profiles profileReader, meals mealCreator, limits domain.MealLimits, loc *time.Location) *AddMeal {
 	if loc == nil {
 		loc = time.UTC
 	}
-	return &AddMeal{users: users, profiles: profiles, meals: meals, dailyLimit: dailyLimit, loc: loc}
+	return &AddMeal{users: users, profiles: profiles, meals: meals, limits: limits, loc: loc}
 }
 
 func (uc *AddMeal) DailyLimit() int {
-	return max(uc.dailyLimit, 0)
+	return max(uc.limits.PerUserPerDay, 0)
+}
+
+func (uc *AddMeal) Limits() domain.MealLimits {
+	return uc.limits
 }
 
 func (uc *AddMeal) Authorize(ctx context.Context, telegramUserID int64) (AuthorizedAuthor, error) {
@@ -63,18 +67,18 @@ func (uc *AddMeal) Authorize(ctx context.Context, telegramUserID int64) (Authori
 }
 
 func (uc *AddMeal) LimitReached(ctx context.Context, author AuthorizedAuthor) (bool, error) {
-	if uc.dailyLimit <= 0 {
+	if uc.limits.PerUserPerDay <= 0 {
 		return false, nil
 	}
 	created, err := uc.meals.CountCreatedSince(ctx, author.User.ID, uc.dayStart())
 	if err != nil {
 		return false, err
 	}
-	return created >= uc.dailyLimit, nil
+	return created >= uc.limits.PerUserPerDay, nil
 }
 
 func (uc *AddMeal) CreateEntry(ctx context.Context, author AuthorizedAuthor, in AddMealInput) (domain.MealEntry, error) {
-	return uc.meals.CreateEntryWithinLimit(ctx, author.User.ID, in.ChatID, in.SourceMessageID, in.MealDate, uc.dayStart(), uc.dailyLimit)
+	return uc.meals.CreateEntryWithinLimit(ctx, author.User.ID, in.ChatID, in.SourceMessageID, in.MealDate, uc.dayStart(), uc.limits)
 }
 
 func (uc *AddMeal) dayStart() time.Time {

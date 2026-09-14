@@ -122,6 +122,14 @@ func MealDailyLimit(limit int) string {
 	return fmt.Sprintf("🚫 Лимит на сегодня исчерпан: %d из %d записей. Новые записи можно будет добавить завтра.", limit, limit)
 }
 
+func ChatDailyLimit(limit int) string {
+	return fmt.Sprintf("🚫 Лимит этой группы на сегодня исчерпан: %d записей. Продолжить можно завтра или в ЛС со мной.", limit)
+}
+
+func MealsInFlight(limit int) string {
+	return fmt.Sprintf("⏳ Ещё разбираю ваши предыдущие записи — в работе уже %d. Дождитесь результата и пришлите снова.", limit)
+}
+
 func ReaddNeedReply() string {
 	return "Ответьте командой /readd на исходное сообщение с едой, чтобы повторить распознавание."
 }

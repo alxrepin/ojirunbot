@@ -16,7 +16,7 @@ type fakeJobQueue struct {
 	enqueued []string
 }
 
-func (q *fakeJobQueue) Enqueue(_ context.Context, _, kind string, _ any, _ string) error {
+func (q *fakeJobQueue) Enqueue(_ context.Context, _, kind string, _ any, _ string, _ int64) error {
 	q.enqueued = append(q.enqueued, kind)
 	return nil
 }
@@ -27,7 +27,7 @@ func (q *fakeJobQueue) Claim(context.Context, string, time.Duration) (domain.Job
 func (q *fakeJobQueue) Complete(context.Context, string) error                     { return nil }
 func (q *fakeJobQueue) Retry(context.Context, string, time.Duration, string) error { return nil }
 func (q *fakeJobQueue) Fail(context.Context, string, string) error                 { return nil }
-func (q *fakeJobQueue) Backlog(context.Context, string) (int, error)               { return 0, nil }
+func (q *fakeJobQueue) Backlog(context.Context, string, int64) (int, error)        { return 0, nil }
 
 func privateMessage(text string) tg.Message {
 	return tg.Message{MessageID: 1, From: &tg.User{ID: 42}, Chat: tg.Chat{ID: 42, Type: "private"}, Text: text}
@@ -86,7 +86,7 @@ func TestGroupPhotoFromStrangerIsIgnored(t *testing.T) {
 	api := &recordingAPI{fakeAPI: &fakeAPI{}}
 	r := &Router{
 		api:       api,
-		addMeal:   usecase.NewAddMeal(fakeUsers{err: domain.ErrUserNotFound}, fakeProfiles{}, fakeMeals{}, 0, time.UTC),
+		addMeal:   usecase.NewAddMeal(fakeUsers{err: domain.ErrUserNotFound}, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC),
 		mealInput: service.NewMealInput(&inputSessions{}),
 		log:       discardLog(),
 	}
@@ -108,7 +108,7 @@ func TestPrivateChatLogsMealsThroughQueue(t *testing.T) {
 		fakeUsers{user: domain.User{ID: "u1", TelegramUserID: 42}},
 		fakeProfiles{profile: domain.Profile{UserID: "u1"}},
 		fakeMeals{entry: domain.MealEntry{ID: "m1", ChatID: 42, SourceMessageID: 2}},
-		0, time.UTC,
+		domain.MealLimits{}, time.UTC,
 	)
 	queue := &fakeJobQueue{}
 	r.mealJobs = service.NewMealJobs(queue, nil, nil, nil)

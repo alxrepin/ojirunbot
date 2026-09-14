@@ -172,8 +172,8 @@ func (r *Router) createMeal(ctx context.Context, source tg.Message, author useca
 		SourceMessageID: sourceMessageID,
 		MealDate:        time.Now().In(r.loc),
 	})
-	if errors.Is(err, domain.ErrDailyMealLimit) {
-		_, _ = r.notify(ctx, source, render.MealDailyLimit(r.addMeal.DailyLimit()), nil)
+	if rejection, ok := r.limitRejection(err); ok {
+		_, _ = r.notify(ctx, source, rejection, nil)
 		return
 	}
 	if err != nil {
@@ -182,20 +182,34 @@ func (r *Router) createMeal(ctx context.Context, source tg.Message, author useca
 	}
 	entry.TelegramUserID = source.From.ID
 
-	entry = r.messenger.Received(ctx, entry, r.mealBacklog(ctx))
+	entry = r.messenger.Received(ctx, entry, r.mealBacklog(ctx, entry.ChatID))
 
 	var photo domain.PhotoRef
 	if best, ok := source.BestPhoto(); ok {
 		photo = domain.PhotoRef{FileID: best.FileID, FileUniqueID: best.FileUniqueID}
 	}
-	if err := r.mealJobs.EnqueueAnalysis(ctx, entry.ID, photo, description); err != nil {
+	if err := r.mealJobs.EnqueueAnalysis(ctx, entry.ID, entry.ChatID, photo, description); err != nil {
 		r.log.Error("enqueue meal analysis failed", "error", err, "meal_entry_id", entry.ID)
 		r.messenger.Fail(ctx, entry, domain.FailAnalyze)
 	}
 }
 
-func (r *Router) mealBacklog(ctx context.Context) int {
-	backlog, err := r.mealJobs.Backlog(ctx)
+func (r *Router) limitRejection(err error) (string, bool) {
+	limits := r.addMeal.Limits()
+	switch {
+	case errors.Is(err, domain.ErrDailyMealLimit):
+		return render.MealDailyLimit(limits.PerUserPerDay), true
+	case errors.Is(err, domain.ErrChatMealLimit):
+		return render.ChatDailyLimit(limits.PerChatPerDay), true
+	case errors.Is(err, domain.ErrMealsInFlight):
+		return render.MealsInFlight(limits.InFlight), true
+	default:
+		return "", false
+	}
+}
+
+func (r *Router) mealBacklog(ctx context.Context, chatID int64) int {
+	backlog, err := r.mealJobs.Backlog(ctx, chatID)
 	if err != nil {
 		r.log.Warn("read meal queue backlog failed", "error", err)
 		return 0

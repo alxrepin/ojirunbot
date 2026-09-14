@@ -13,20 +13,22 @@ import (
 )
 
 type Config struct {
-	AppEnv               string
-	LogLevel             string
-	Telegram             TelegramConfig
-	OpenRouter           OpenRouterConfig
-	DatabaseURL          string
-	ProxyURL             string
-	Timezone             string
-	DailyReportTime      string
-	PhotoStorageDir      string
-	MaxPhotoBytes        int64
-	MaxConcurrentUpdates int
-	MaxConcurrentAI      int
-	ReportWorkers        int
-	MaxMealsPerDay       int
+	AppEnv                string
+	LogLevel              string
+	Telegram              TelegramConfig
+	OpenRouter            OpenRouterConfig
+	DatabaseURL           string
+	ProxyURL              string
+	Timezone              string
+	DailyReportTime       string
+	PhotoStorageDir       string
+	MaxPhotoBytes         int64
+	MaxConcurrentUpdates  int
+	MaxConcurrentAI       int
+	ReportWorkers         int
+	MaxMealsPerDay        int
+	MaxMealsPerChatPerDay int
+	MaxMealsInFlight      int
 }
 
 type TelegramConfig struct {
@@ -48,18 +50,20 @@ func Load() (Config, error) {
 	_ = LoadDotEnv(".env")
 
 	cfg := Config{
-		AppEnv:               env("APP_ENV", "local"),
-		LogLevel:             env("LOG_LEVEL", "info"),
-		DatabaseURL:          env("DATABASE_URL", ""),
-		ProxyURL:             env("PROXY_URL", ""),
-		Timezone:             env("APP_TIMEZONE", "Europe/Moscow"),
-		DailyReportTime:      env("DAILY_REPORT_TIME", "09:00"),
-		PhotoStorageDir:      env("PHOTO_STORAGE_DIR", "./storage/photos"),
-		MaxPhotoBytes:        envInt64("MAX_PHOTO_BYTES", 10*1024*1024),
-		MaxConcurrentUpdates: max(envInt("MAX_CONCURRENT_UPDATES", 32), 1),
-		MaxConcurrentAI:      max(envInt("MAX_CONCURRENT_AI", 4), 1),
-		ReportWorkers:        max(envInt("REPORT_WORKERS", 2), 1),
-		MaxMealsPerDay:       max(envInt("MAX_MEALS_PER_DAY", 10), 0),
+		AppEnv:                env("APP_ENV", "local"),
+		LogLevel:              env("LOG_LEVEL", "info"),
+		DatabaseURL:           env("DATABASE_URL", ""),
+		ProxyURL:              env("PROXY_URL", ""),
+		Timezone:              env("APP_TIMEZONE", "Europe/Moscow"),
+		DailyReportTime:       env("DAILY_REPORT_TIME", "09:00"),
+		PhotoStorageDir:       env("PHOTO_STORAGE_DIR", "./storage/photos"),
+		MaxPhotoBytes:         envInt64("MAX_PHOTO_BYTES", 10*1024*1024),
+		MaxConcurrentUpdates:  max(envInt("MAX_CONCURRENT_UPDATES", 32), 1),
+		MaxConcurrentAI:       max(envInt("MAX_CONCURRENT_AI", 4), 1),
+		ReportWorkers:         max(envInt("REPORT_WORKERS", 2), 1),
+		MaxMealsPerDay:        max(envInt("MAX_MEALS_PER_DAY", 10), 0),
+		MaxMealsPerChatPerDay: max(envInt("MAX_MEALS_PER_CHAT_PER_DAY", 100), 0),
+		MaxMealsInFlight:      max(envInt("MAX_MEALS_IN_FLIGHT", 3), 0),
 		Telegram: TelegramConfig{
 			BotToken:        env("TELEGRAM_BOT_TOKEN", ""),
 			APIBaseURL:      env("TELEGRAM_API_BASE_URL", "https://api.telegram.org"),

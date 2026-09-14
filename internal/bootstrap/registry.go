@@ -140,7 +140,11 @@ func (r *registry) load(ctx context.Context, cfg Config, log *slog.Logger, promp
 	)
 	r.reportWorkers = service.NewJobWorkers(jobs, domain.QueueReport, cfg.ReportWorkers, reportJobLease, r.report.Handle, log)
 
-	r.addMeal = usecase.NewAddMeal(users, profiles, meals, cfg.MaxMealsPerDay, loc)
+	r.addMeal = usecase.NewAddMeal(users, profiles, meals, domain.MealLimits{
+		PerUserPerDay: cfg.MaxMealsPerDay,
+		PerChatPerDay: cfg.MaxMealsPerChatPerDay,
+		InFlight:      cfg.MaxMealsInFlight,
+	}, loc)
 	r.mealActions = usecase.NewMealActions(meals)
 	r.getProfile = usecase.NewGetProfile(users, profiles)
 	r.getStats = usecase.NewGetStats(users, profiles, reports, loc)

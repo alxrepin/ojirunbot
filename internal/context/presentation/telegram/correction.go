@@ -28,10 +28,10 @@ func (r *Router) handleCorrection(ctx context.Context, msg tg.Message, text stri
 		_, _ = r.notify(ctx, msg, render.CorrectionLimit(domain.MaxCorrectionsPerEntry), nil)
 		return true
 	}
-	if backlog := r.mealBacklog(ctx); backlog > 0 {
+	if backlog := r.mealBacklog(ctx, entry.ChatID); backlog > 0 {
 		r.messenger.Queued(ctx, entry, backlog)
 	}
-	if err := r.mealJobs.EnqueueCorrection(ctx, entry.ID, text); err != nil {
+	if err := r.mealJobs.EnqueueCorrection(ctx, entry.ID, entry.ChatID, text); err != nil {
 		r.log.Error("enqueue meal correction failed", "error", err, "meal_entry_id", entry.ID)
 		r.messenger.Fail(ctx, entry, domain.FailReanalyze)
 	}

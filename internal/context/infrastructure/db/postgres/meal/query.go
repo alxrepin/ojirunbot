@@ -13,6 +13,17 @@ const lockUserMealsQuery = `SELECT pg_advisory_xact_lock(hashtext($1::text))`
 
 const countCreatedSinceQuery = `SELECT count(*) FROM meal_entries WHERE user_id=$1 AND created_at >= $2`
 
+const countInFlightQuery = `
+	SELECT count(*)
+	FROM meal_entries
+	WHERE user_id=$1
+	  AND status IN ('received', 'downloading_photo', 'analyzing', 'reanalyzing')
+	  AND created_at > now() - interval '15 minutes'`
+
+const lockChatMealsQuery = `SELECT pg_advisory_xact_lock(hashtext('chat:' || $1::bigint::text))`
+
+const countChatCreatedSinceQuery = `SELECT count(*) FROM meal_entries WHERE chat_id=$1 AND created_at >= $2`
+
 const setStatusQuery = `UPDATE meal_entries SET status=$2 WHERE id=$1`
 
 const insertRevisionQuery = `

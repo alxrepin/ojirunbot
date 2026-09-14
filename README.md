@@ -31,7 +31,7 @@ tracks them against your daily target and sends you a breakdown of yesterday eve
 - **Works in groups** — track food together with friends. Statuses, hints and the action buttons are ephemeral messages only the author sees; the group sees just the accepted meal and `/stats` cards.
 - **Fixes after the fact** — reply `/yesterday` to move a forgotten meal to the previous day, or `/readd` to run recognition again.
 - **Subscribers only** — access is limited to subscribers of the author's Telegram channel.
-- **Fair use** — up to 10 meals per person per day across all chats, so AI costs stay predictable.
+- **Fair use** — up to 10 meals per person per day across all chats and up to 100 per group, so AI costs stay predictable. A flooding group gets at most one analysis worker; private chats and other groups are served first.
 
 ## How it works
 

@@ -23,7 +23,7 @@ type memQueue struct {
 	backlog   int
 }
 
-func (q *memQueue) Enqueue(_ context.Context, _, kind string, _ any, _ string) error {
+func (q *memQueue) Enqueue(_ context.Context, _, kind string, _ any, _ string, _ int64) error {
 	q.enqueued = append(q.enqueued, kind)
 	return nil
 }
@@ -50,7 +50,7 @@ func (q *memQueue) Fail(_ context.Context, jobID string, _ string) error {
 	return nil
 }
 
-func (q *memQueue) Backlog(context.Context, string) (int, error) { return q.backlog, nil }
+func (q *memQueue) Backlog(context.Context, string, int64) (int, error) { return q.backlog, nil }
 
 type throttledError struct{}
 

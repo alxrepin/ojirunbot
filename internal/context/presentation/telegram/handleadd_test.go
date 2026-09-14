@@ -71,7 +71,7 @@ type fakeMeals struct {
 	created int
 }
 
-func (f fakeMeals) CreateEntryWithinLimit(context.Context, string, int64, int64, time.Time, time.Time, int) (domain.MealEntry, error) {
+func (f fakeMeals) CreateEntryWithinLimit(context.Context, string, int64, int64, time.Time, time.Time, domain.MealLimits) (domain.MealEntry, error) {
 	return f.entry, f.err
 }
 
@@ -97,7 +97,7 @@ func TestHandleAddRejectsEmpty(t *testing.T) {
 		fakeUsers{user: domain.User{ID: "u1", TelegramUserID: 42}},
 		fakeProfiles{profile: domain.Profile{UserID: "u1"}},
 		fakeMeals{},
-		0, time.UTC,
+		domain.MealLimits{}, time.UTC,
 	)
 	r := newRouter(api, addMeal)
 
@@ -133,7 +133,7 @@ func TestHandleReaddNeedsReply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			api := &fakeAPI{}
 			users := &recordingUsers{user: domain.User{ID: "u1"}}
-			addMeal := usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC)
+			addMeal := usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC)
 			r := newRouter(api, addMeal)
 
 			r.handleReadd(context.Background(), msg)
@@ -165,7 +165,7 @@ func readdMessage(from int64) tg.Message {
 func TestHandleReaddOnlyByAuthor(t *testing.T) {
 	api := &fakeAPI{}
 	users := &recordingUsers{user: domain.User{ID: "u1"}}
-	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC))
 	r.actions = usecase.NewMealActions(&fakeMealActions{})
 
 	r.handleReadd(context.Background(), readdMessage(99))
@@ -181,7 +181,7 @@ func TestHandleReaddOnlyByAuthor(t *testing.T) {
 func TestHandleReaddAuthorshipFromReplay(t *testing.T) {
 	api := &fakeAPI{}
 	users := &recordingUsers{err: domain.ErrUserNotFound}
-	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC))
 	r.actions = usecase.NewMealActions(&fakeMealActions{})
 
 	r.handleReadd(context.Background(), readdMessage(42))
@@ -197,7 +197,7 @@ func TestHandleReaddAuthorshipFromReplay(t *testing.T) {
 func TestHandleReaddWaitsForProcessing(t *testing.T) {
 	api := &fakeAPI{}
 	users := &recordingUsers{user: domain.User{ID: "u1"}}
-	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC))
 	r.actions = usecase.NewMealActions(&fakeMealActions{entry: domain.MealEntry{
 		ID: "m1", ChatID: -100, SourceMessageID: 2, TelegramUserID: 42, Status: domain.StatusAnalyzing,
 	}})
@@ -241,7 +241,7 @@ func TestHandleAddUnregisteredBeforeEmpty(t *testing.T) {
 		fakeUsers{err: domain.ErrUserNotFound},
 		fakeProfiles{},
 		fakeMeals{},
-		0, time.UTC,
+		domain.MealLimits{}, time.UTC,
 	)
 	r := newRouter(api, addMeal)
 
