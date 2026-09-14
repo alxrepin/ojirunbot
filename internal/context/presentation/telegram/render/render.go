@@ -119,6 +119,26 @@ func ReaddNeedReply() string {
 	return "Ответьте командой /readd на исходное сообщение с едой, чтобы повторить распознавание."
 }
 
+func ReaddNotAuthor() string {
+	return "Повторить распознавание может только автор сообщения с едой."
+}
+
+func ReaddInProgress() string {
+	return "Эта запись ещё обрабатывается. Дождитесь результата, потом можно повторить."
+}
+
+func ReaddFailed() string {
+	return "Не удалось заменить прошлую запись. Попробуйте ещё раз."
+}
+
+func CorrectionLimitAlert(limit int) string {
+	return fmt.Sprintf("Лимит правок исчерпан: %d на запись. Удалите запись и добавьте заново.", limit)
+}
+
+func CorrectionLimit(limit int) string {
+	return fmt.Sprintf("🚫 Лимит правок исчерпан: %d на запись. Вернул карточку без изменений — если нужно, удалите запись и добавьте заново.", limit)
+}
+
 func YesterdayNeedReply() string {
 	return "Ответьте командой /yesterday на сообщение с едой или на карточку бота, чтобы перенести запись на вчера."
 }
@@ -407,6 +427,10 @@ func SubscriptionNotFound() string {
 
 func SubscriptionConfirmed() string {
 	return "✅ Подписка подтверждена — спасибо! Можно пользоваться ботом."
+}
+
+func SubscriptionCheckFailed() string {
+	return "⚠️ Не удалось проверить подписку на канал. Попробуйте ещё раз через минуту."
 }
 
 func channelLink(label, url string) string {

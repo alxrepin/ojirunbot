@@ -53,6 +53,19 @@ jobs:
       - name: Coverage
         run: go tool cover -func=coverage.out | tail -n 1
 
+  vulnerabilities:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   migrations:
     name: Migrations
     runs-on: ubuntu-latest

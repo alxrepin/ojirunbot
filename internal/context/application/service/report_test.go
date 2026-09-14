@@ -59,7 +59,13 @@ func (f *fakeReportNotifier) Send(_ context.Context, user domain.ReportUser, _ t
 
 type fixedSubscribers bool
 
-func (f fixedSubscribers) IsSubscribed(context.Context, int64) bool { return bool(f) }
+func (f fixedSubscribers) IsSubscribed(context.Context, int64) (bool, error) { return bool(f), nil }
+
+type brokenSubscribers struct{}
+
+func (brokenSubscribers) IsSubscribed(context.Context, int64) (bool, error) {
+	return false, errors.New("telegram is down")
+}
 
 type recommendingAnalyzer struct{}
 
@@ -135,5 +141,21 @@ func TestReportSendFailureReleasesSlot(t *testing.T) {
 	}
 	if !errors.As(err, new(blockedError)) {
 		t.Fatalf("send error should stay inspectable, got %v", err)
+	}
+}
+
+func TestReportSubscriptionCheckFailureRetries(t *testing.T) {
+	repo := &fakeReportRepo{created: true, meals: []domain.DailyMeal{{}}}
+	notifier := &fakeReportNotifier{}
+	job := reportJob(t)
+	report := NewReport(repo, recommendingAnalyzer{}, notifier, brokenSubscribers{}, "prompt", time.UTC, discardLogger())
+
+	err := report.Handle(context.Background(), job)
+
+	if err == nil || notifier.sends != 0 || len(repo.statuses) != 1 || repo.statuses[0] != domain.ReportFailed {
+		t.Fatalf("err=%v sends=%d statuses=%v, want an error, no send and a released slot", err, notifier.sends, repo.statuses)
+	}
+	if _, retry := retryDelay(job, err); !retry {
+		t.Fatal("a failed subscription check should be retried, not skipped")
 	}
 }

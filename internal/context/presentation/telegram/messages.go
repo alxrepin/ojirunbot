@@ -67,11 +67,14 @@ func (m *MealMessenger) Accepted(ctx context.Context, entry domain.MealEntry, vi
 	if err := deleteBotMessage(ctx, m.api, m.card(entry)); err != nil {
 		m.log.Debug("delete ephemeral meal card failed", "error", err, "meal_entry_id", entry.ID)
 	}
+	_ = m.binder.SetEphemeralMessage(ctx, entry.ID, 0)
 }
 
 func (m *MealMessenger) Deleted(ctx context.Context, entry domain.MealEntry) {
-	if err := deleteBotMessage(ctx, m.api, m.card(entry)); err != nil {
-		_ = m.updateMessage(ctx, entry, render.Deleted(), nil)
+	for _, card := range m.cards(entry) {
+		if err := deleteBotMessage(ctx, m.api, card); err != nil {
+			_ = editBotMessage(ctx, m.api, card, render.Deleted(), nil, false)
+		}
 	}
 }
 
@@ -95,6 +98,17 @@ func (m *MealMessenger) card(entry domain.MealEntry) botMessage {
 		return botMessage{ChatID: entry.ChatID, ID: entry.EphemeralMessageID, Receiver: entry.TelegramUserID}
 	}
 	return botMessage{ChatID: entry.ChatID, ID: entry.BotMessageID}
+}
+
+func (m *MealMessenger) cards(entry domain.MealEntry) []botMessage {
+	var cards []botMessage
+	if inGroup(entry.ChatID) && entry.EphemeralMessageID != 0 {
+		cards = append(cards, botMessage{ChatID: entry.ChatID, ID: entry.EphemeralMessageID, Receiver: entry.TelegramUserID})
+	}
+	if entry.BotMessageID != 0 {
+		cards = append(cards, botMessage{ChatID: entry.ChatID, ID: entry.BotMessageID})
+	}
+	return cards
 }
 
 func (m *MealMessenger) send(ctx context.Context, entry *domain.MealEntry, text string, opts *tg.SendOptions, rich bool) error {

@@ -29,7 +29,12 @@ func (r *Router) handleCallback(ctx context.Context, cb tg.CallbackQuery) {
 		r.handleSubscriptionCheck(ctx, cb, &answer)
 		return
 	}
-	if !r.subscription.IsSubscribed(ctx, cb.From.ID) {
+	subscribed, err := r.subscription.IsSubscribed(ctx, cb.From.ID)
+	switch {
+	case err != nil:
+		answer.Alert(render.SubscriptionCheckFailed())
+		return
+	case !subscribed:
 		answer.Alert(render.SubscribeAlert(r.channel.Label))
 		return
 	}
@@ -77,6 +82,10 @@ func (r *Router) handleCallback(ctx context.Context, cb tg.CallbackQuery) {
 		}
 		r.pipeline.ShowAccepted(ctx, entry, revision.Analysis())
 	case tg.ActionEdit:
+		if !revision.CanCorrect() {
+			answer.Alert(render.CorrectionLimitAlert(domain.MaxCorrectionsPerEntry))
+			return
+		}
 		ok, err := r.actions.RequestEdit(ctx, action.MealID, cb.From.ID)
 		if err != nil || !ok {
 			answer.Alert("Запись уже нельзя редактировать.")

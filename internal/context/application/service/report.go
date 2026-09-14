@@ -25,7 +25,7 @@ type reportRepo interface {
 }
 
 type subscriberChecker interface {
-	IsSubscribed(ctx context.Context, telegramUserID int64) bool
+	IsSubscribed(ctx context.Context, telegramUserID int64) (bool, error)
 }
 
 const reportDateLayout = "2006-01-02"
@@ -82,7 +82,12 @@ func (s *Report) Handle(ctx context.Context, job domain.Job) error {
 	if err != nil || !created {
 		return err
 	}
-	if !s.subscribers.IsSubscribed(ctx, user.TelegramUserID) {
+	subscribed, err := s.subscribers.IsSubscribed(ctx, user.TelegramUserID)
+	if err != nil {
+		s.release(ctx, reportID)
+		return err
+	}
+	if !subscribed {
 		return s.repo.SetStatus(ctx, reportID, domain.ReportSkippedUnsubscribed)
 	}
 

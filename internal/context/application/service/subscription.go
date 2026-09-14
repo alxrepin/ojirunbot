@@ -47,19 +47,19 @@ func (s *Subscription) Enabled() bool {
 	return s != nil && s.channel != nil
 }
 
-func (s *Subscription) IsSubscribed(ctx context.Context, telegramUserID int64) bool {
+func (s *Subscription) IsSubscribed(ctx context.Context, telegramUserID int64) (bool, error) {
 	if !s.Enabled() {
-		return true
+		return true, nil
 	}
 	if s.isConfirmed(telegramUserID) {
-		return true
+		return true, nil
 	}
 	return s.check(ctx, telegramUserID)
 }
 
-func (s *Subscription) Recheck(ctx context.Context, telegramUserID int64) bool {
+func (s *Subscription) Recheck(ctx context.Context, telegramUserID int64) (bool, error) {
 	if !s.Enabled() {
-		return true
+		return true, nil
 	}
 	return s.check(ctx, telegramUserID)
 }
@@ -78,18 +78,18 @@ func (s *Subscription) Verify(ctx context.Context, botUserID int64) error {
 	return nil
 }
 
-func (s *Subscription) check(ctx context.Context, telegramUserID int64) bool {
+func (s *Subscription) check(ctx context.Context, telegramUserID int64) (bool, error) {
 	status, err := s.members.ChatMemberStatus(ctx, s.channel, telegramUserID)
 	if err != nil {
-		s.log.Warn("check channel subscription failed, letting the user through", "error", err, "telegram_user_id", telegramUserID)
-		return true
+		s.log.Error("check channel subscription failed, refusing the user", "error", err, "telegram_user_id", telegramUserID)
+		return false, fmt.Errorf("check channel subscription: %w", err)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !isChannelMember(status) {
 		delete(s.confirmed, telegramUserID)
-		return false
+		return false, nil
 	}
 	now := s.now()
 	if len(s.confirmed) >= subscriptionCacheSweepSize {
@@ -100,7 +100,7 @@ func (s *Subscription) check(ctx context.Context, telegramUserID int64) bool {
 		}
 	}
 	s.confirmed[telegramUserID] = now.Add(subscriptionCacheTTL)
-	return true
+	return true, nil
 }
 
 func (s *Subscription) isConfirmed(telegramUserID int64) bool {

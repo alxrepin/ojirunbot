@@ -2,12 +2,14 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	"ojirun/internal/context/application/service"
 	"ojirun/internal/context/application/usecase"
+	"ojirun/internal/context/domain"
 	tg "ojirun/internal/context/infrastructure/telegram"
 	"ojirun/internal/context/presentation/telegram/render"
 )
@@ -145,6 +147,10 @@ func (r *Router) handlePrivateMessage(ctx context.Context, msg tg.Message) {
 		return
 	}
 	if command == "" && text != "" && r.handleCorrection(ctx, msg, text) {
+		return
+	}
+	if _, err := r.profiles.Execute(ctx, msg.From.ID); errors.Is(err, domain.ErrNotFound) {
+		_, _ = r.api.SendMessage(ctx, msg.Chat.ID, render.NeedRegisterPrivate(), nil)
 		return
 	}
 	_, _ = r.api.SendMessage(ctx, msg.Chat.ID, render.PrivateHelp(), withMenu(nil))

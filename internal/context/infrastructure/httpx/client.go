@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	proxyIdleTimeout      = 30 * time.Second
+	proxyIdleConnsPerHost = 8
+)
+
 func NewClient(timeout time.Duration, proxyURL string) (*http.Client, error) {
 	client := &http.Client{Timeout: timeout}
 	if proxyURL == "" {
@@ -33,7 +38,8 @@ func NewClient(timeout time.Duration, proxyURL string) (*http.Client, error) {
 	transport.Proxy = http.ProxyURL(parsed)
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = headerTimeout
-	transport.DisableKeepAlives = true
+	transport.IdleConnTimeout = proxyIdleTimeout
+	transport.MaxIdleConnsPerHost = proxyIdleConnsPerHost
 	transport.ForceAttemptHTTP2 = false
 	transport.TLSClientConfig = &tls.Config{NextProtos: []string{"http/1.1"}}
 	client.Transport = transport

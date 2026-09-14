@@ -3,7 +3,9 @@ package openrouter
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,42 +46,55 @@ func NewClient(cfg Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) AnalyzeNutrition(ctx context.Context, input domain.AnalyzeRequest) (domain.AIResult[domain.NutritionAnalysis], error) {
-	content := []map[string]any{
-		{
-			"type": "text",
-			"text": buildAnalysisText(input),
-		},
+type chatRequest struct {
+	system string
+	wire   any
+	record any
+	format map[string]any
+}
+
+func (r chatRequest) encode(model string) (wire, record []byte, err error) {
+	wire, err = json.Marshal(r.payload(model, r.wire))
+	if err != nil {
+		return nil, nil, err
 	}
+	record, err = json.Marshal(r.payload(model, r.record))
+	if err != nil {
+		return nil, nil, err
+	}
+	return wire, record, nil
+}
+
+func (r chatRequest) payload(model string, user any) map[string]any {
+	return map[string]any{
+		"model": model,
+		"messages": []map[string]any{
+			{"role": "system", "content": r.system},
+			{"role": "user", "content": user},
+		},
+		"response_format": r.format,
+		"stream":          false,
+	}
+}
+
+func (c *Client) AnalyzeNutrition(ctx context.Context, input domain.AnalyzeRequest) (domain.AIResult[domain.NutritionAnalysis], error) {
+	text := textPart(buildAnalysisText(input))
+	wire := []map[string]any{text}
+	record := []map[string]any{text}
 	if input.ImagePath != "" {
-		dataURL, err := imageDataURL(input.ImagePath, input.ImageMime)
+		image, err := loadImage(input.ImagePath, input.ImageMime)
 		if err != nil {
 			return domain.AIResult[domain.NutritionAnalysis]{}, err
 		}
-		content = append(content, map[string]any{
-			"type": "image_url",
-			"image_url": map[string]any{
-				"url": dataURL,
-			},
-		})
+		wire = append(wire, imagePart(image.dataURL))
+		record = append(record, imagePart(image.ref))
 	}
-
-	payload := map[string]any{
-		"messages": []map[string]any{
-			{
-				"role":    "system",
-				"content": input.Prompt,
-			},
-			{
-				"role":    "user",
-				"content": content,
-			},
-		},
-		"response_format": jsonSchemaResponseFormat("nutrition_analysis", nutritionAnalysisSchema()),
-		"stream":          false,
-	}
-
-	return doStructured[domain.NutritionAnalysis](ctx, c, payload)
+	return doStructured[domain.NutritionAnalysis](ctx, c, chatRequest{
+		system: input.Prompt,
+		wire:   wire,
+		record: record,
+		format: jsonSchemaResponseFormat("nutrition_analysis", nutritionAnalysisSchema()),
+	})
 }
 
 func (c *Client) DailyRecommendation(ctx context.Context, input domain.RecommendationRequest) (domain.AIResult[domain.DailyRecommendation], error) {
@@ -91,16 +106,12 @@ func (c *Client) DailyRecommendation(ctx context.Context, input domain.Recommend
 	text.WriteString("\n\nОтчет за вчера JSON:\n")
 	text.Write(input.ReportJSON)
 
-	payload := map[string]any{
-		"messages": []map[string]any{
-			{"role": "system", "content": input.Prompt},
-			{"role": "user", "content": text.String()},
-		},
-		"response_format": jsonSchemaResponseFormat("daily_recommendation", dailyRecommendationSchema()),
-		"stream":          false,
-	}
-
-	return doStructured[domain.DailyRecommendation](ctx, c, payload)
+	return doStructured[domain.DailyRecommendation](ctx, c, chatRequest{
+		system: input.Prompt,
+		wire:   text.String(),
+		record: text.String(),
+		format: jsonSchemaResponseFormat("daily_recommendation", dailyRecommendationSchema()),
+	})
 }
 
 const maxAttempts = 3
@@ -113,13 +124,12 @@ const (
 	outcomeFatal
 )
 
-func doStructured[T any](ctx context.Context, c *Client, payload map[string]any) (domain.AIResult[T], error) {
+func doStructured[T any](ctx context.Context, c *Client, req chatRequest) (domain.AIResult[T], error) {
 	models := c.cfg.Models
 	totalAttempts := max(maxAttempts, len(models))
 
 	modelIdx := 0
-	payload["model"] = models[modelIdx]
-	requestJSON, err := json.Marshal(payload)
+	wire, record, err := req.encode(models[modelIdx])
 	if err != nil {
 		return domain.AIResult[T]{}, err
 	}
@@ -128,10 +138,10 @@ func doStructured[T any](ctx context.Context, c *Client, payload map[string]any)
 	for attempt := 1; attempt <= totalAttempts; attempt++ {
 		if attempt > 1 {
 			if err := sleepBackoff(ctx, attempt); err != nil {
-				return domain.AIResult[T]{RequestJSON: requestJSON}, err
+				return domain.AIResult[T]{RequestJSON: record}, err
 			}
 		}
-		result, outcome, err := doAttempt[T](ctx, c, requestJSON)
+		result, outcome, err := doAttempt[T](ctx, c, wire, record)
 		if err == nil {
 			return result, nil
 		}
@@ -144,8 +154,7 @@ func doStructured[T any](ctx context.Context, c *Client, payload map[string]any)
 			next := (modelIdx + 1) % len(models)
 			c.log.WarnContext(ctx, "openrouter attempt failed, switching model",
 				"attempt", attempt, "model", models[modelIdx], "next_model", models[next], "error", err)
-			payload["model"] = models[next]
-			requestJSON, err = json.Marshal(payload)
+			wire, record, err = req.encode(models[next])
 			if err != nil {
 				return domain.AIResult[T]{}, err
 			}
@@ -155,13 +164,14 @@ func doStructured[T any](ctx context.Context, c *Client, payload map[string]any)
 				"attempt", attempt, "model", models[modelIdx], "error", err)
 		}
 	}
-	return domain.AIResult[T]{RequestJSON: requestJSON}, fmt.Errorf("openrouter failed after %d attempts: %w", totalAttempts, errors.Join(attemptErrs...))
+	return domain.AIResult[T]{RequestJSON: record}, fmt.Errorf("openrouter failed after %d attempts: %w", totalAttempts, errors.Join(attemptErrs...))
 }
 
-func doAttempt[T any](ctx context.Context, c *Client, requestJSON []byte) (domain.AIResult[T], attemptOutcome, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.BaseURL+"/chat/completions", bytes.NewReader(requestJSON))
+func doAttempt[T any](ctx context.Context, c *Client, wire, record []byte) (domain.AIResult[T], attemptOutcome, error) {
+	result := domain.AIResult[T]{RequestJSON: record}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.BaseURL+"/chat/completions", bytes.NewReader(wire))
 	if err != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON}, outcomeFatal, err
+		return result, outcomeFatal, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -174,16 +184,16 @@ func doAttempt[T any](ctx context.Context, c *Client, requestJSON []byte) (domai
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON}, failureOutcome(ctx, outcomeModelFailure), err
+		return result, failureOutcome(ctx, outcomeModelFailure), err
 	}
 	defer resp.Body.Close()
 
-	responseJSON, err := io.ReadAll(resp.Body)
+	result.ResponseJSON, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON}, failureOutcome(ctx, outcomeModelFailure), err
+		return result, failureOutcome(ctx, outcomeModelFailure), err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter status %s: %s", resp.Status, string(responseJSON))
+		return result, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter status %s: %s", resp.Status, string(result.ResponseJSON))
 	}
 
 	var envelope struct {
@@ -202,23 +212,22 @@ func doAttempt[T any](ctx context.Context, c *Client, requestJSON []byte) (domai
 			} `json:"error,omitempty"`
 		} `json:"choices"`
 	}
-	if err := json.Unmarshal(responseJSON, &envelope); err != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeModelFailure), err
+	if err := json.Unmarshal(result.ResponseJSON, &envelope); err != nil {
+		return result, failureOutcome(ctx, outcomeModelFailure), err
 	}
 	if envelope.Error != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter error %d: %s", envelope.Error.Code, envelope.Error.Message)
+		return result, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter error %d: %s", envelope.Error.Code, envelope.Error.Message)
 	}
 	if len(envelope.Choices) == 0 {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter returned no choices; body=%s", string(responseJSON))
+		return result, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter returned no choices; body=%s", string(result.ResponseJSON))
 	}
 	if envelope.Choices[0].Error != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter choice error %d: %s", envelope.Choices[0].Error.Code, envelope.Choices[0].Error.Message)
+		return result, failureOutcome(ctx, outcomeModelFailure), fmt.Errorf("openrouter choice error %d: %s", envelope.Choices[0].Error.Code, envelope.Choices[0].Error.Message)
 	}
-	var value T
-	if err := json.Unmarshal([]byte(envelope.Choices[0].Message.Content), &value); err != nil {
-		return domain.AIResult[T]{RequestJSON: requestJSON, ResponseJSON: responseJSON}, failureOutcome(ctx, outcomeContentFailure), fmt.Errorf("decode structured content: %w; content=%s", err, envelope.Choices[0].Message.Content)
+	if err := json.Unmarshal([]byte(envelope.Choices[0].Message.Content), &result.Value); err != nil {
+		return result, failureOutcome(ctx, outcomeContentFailure), fmt.Errorf("decode structured content: %w; content=%s", err, envelope.Choices[0].Message.Content)
 	}
-	return domain.AIResult[T]{Value: value, RequestJSON: requestJSON, ResponseJSON: responseJSON}, outcomeModelFailure, nil
+	return result, outcomeModelFailure, nil
 }
 
 func failureOutcome(ctx context.Context, kind attemptOutcome) attemptOutcome {
@@ -276,13 +285,30 @@ func buildAnalysisText(input domain.AnalyzeRequest) string {
 	return b.String()
 }
 
-func imageDataURL(path, mimeType string) (string, error) {
+type inlineImage struct {
+	dataURL string
+	ref     string
+}
+
+func loadImage(path, mimeType string) (inlineImage, error) {
 	if mimeType == "" {
 		mimeType = "image/jpeg"
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return inlineImage{}, err
 	}
-	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(raw), nil
+	sum := sha256.Sum256(raw)
+	return inlineImage{
+		dataURL: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(raw),
+		ref:     "photo:sha256:" + hex.EncodeToString(sum[:]),
+	}, nil
+}
+
+func textPart(text string) map[string]any {
+	return map[string]any{"type": "text", "text": text}
+}
+
+func imagePart(url string) map[string]any {
+	return map[string]any{"type": "image_url", "image_url": map[string]any{"url": url}}
 }

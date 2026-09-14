@@ -54,6 +54,34 @@ func TestPrivateChatRequiresSubscription(t *testing.T) {
 	}
 }
 
+func TestPrivateTextFromStrangerAsksToRegister(t *testing.T) {
+	api := &recordingAPI{fakeAPI: &fakeAPI{}}
+	r := newInputRouter(api, &inputSessions{})
+	r.settings = service.NewSettings(&inputSessions{}, nil, nil)
+	r.registration = service.NewRegistration(&inputSessions{}, nil, nil, discardLog())
+	r.actions = usecase.NewMealActions(&fakeMealActions{})
+	r.profiles = usecase.NewGetProfile(fakeUsers{err: domain.ErrUserNotFound}, fakeProfiles{})
+
+	r.handlePrivateMessage(context.Background(), privateMessage("привет"))
+
+	if len(api.sent) != 1 || api.sent[0] != render.NeedRegisterPrivate() {
+		t.Fatalf("a stranger should be asked to register, got %v", api.sent)
+	}
+	if api.opts[0] != nil && api.opts[0].ReplyMarkup != nil {
+		t.Fatalf("no menu before registration, got %#v", api.opts[0].ReplyMarkup)
+	}
+
+	r.profiles = usecase.NewGetProfile(fakeUsers{user: domain.User{ID: "u1"}}, fakeProfiles{profile: domain.Profile{UserID: "u1"}})
+	r.handlePrivateMessage(context.Background(), privateMessage("привет"))
+
+	if len(api.sent) != 2 || api.sent[1] != render.PrivateHelp() {
+		t.Fatalf("a registered user gets the command list, got %v", api.sent)
+	}
+	if _, ok := api.opts[1].ReplyMarkup.(tg.ReplyKeyboardMarkup); !ok {
+		t.Fatalf("the command list comes with the menu, got %#v", api.opts[1].ReplyMarkup)
+	}
+}
+
 func TestGroupPhotoFromStrangerIsIgnored(t *testing.T) {
 	api := &recordingAPI{fakeAPI: &fakeAPI{}}
 	r := &Router{

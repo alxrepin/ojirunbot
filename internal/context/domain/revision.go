@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const MaxCorrectionsPerEntry = 5
+
 type MealRevision struct {
 	ID                string
 	MealEntryID       string
@@ -54,6 +56,10 @@ func NewRevision(mealID, userText, correction string, analysis NutritionAnalysis
 		Confidence:        analysis.Confidence,
 		Items:             items,
 	}
+}
+
+func (r MealRevision) CanCorrect() bool {
+	return r.Revision <= MaxCorrectionsPerEntry
 }
 
 func (r MealRevision) Analysis() NutritionAnalysis {

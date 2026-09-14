@@ -61,6 +61,10 @@ func TestNewClientWithProxyCredentials(t *testing.T) {
 	if user != "hetzner" || pass != "p@ss:word" {
 		t.Fatalf("credentials = %q:%q, want hetzner with decoded password", user, pass)
 	}
+	if transport.DisableKeepAlives || transport.IdleConnTimeout != proxyIdleTimeout || transport.MaxIdleConnsPerHost != proxyIdleConnsPerHost {
+		t.Fatalf("proxied connections should be reused: keepalive off=%v idle=%v per host=%d",
+			transport.DisableKeepAlives, transport.IdleConnTimeout, transport.MaxIdleConnsPerHost)
+	}
 }
 
 func TestNewClientInvalidProxyURL(t *testing.T) {

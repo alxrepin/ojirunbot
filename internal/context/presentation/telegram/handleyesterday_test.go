@@ -14,13 +14,17 @@ import (
 )
 
 type fakeMealActions struct {
-	entry    domain.MealEntry
-	findErr  error
-	movable  bool
-	gotDate  time.Time
-	gotMeal  string
-	gotUser  int64
-	setCalls int
+	entry     domain.MealEntry
+	revision  domain.MealRevision
+	findErr   error
+	movable   bool
+	gotDate   time.Time
+	gotMeal   string
+	gotUser   int64
+	setCalls  int
+	deleted   []string
+	edits     []string
+	cancelled []string
 }
 
 func (f *fakeMealActions) FindByMessage(context.Context, int64, int64) (domain.MealEntry, error) {
@@ -34,18 +38,34 @@ func (f *fakeMealActions) SetMealDate(_ context.Context, mealID string, telegram
 }
 
 func (f *fakeMealActions) GetForAction(context.Context, string) (domain.MealEntry, domain.MealRevision, error) {
-	return domain.MealEntry{}, domain.MealRevision{}, nil
+	return f.entry, f.revision, nil
 }
+
 func (f *fakeMealActions) Accept(context.Context, string, int64) (bool, error) { return false, nil }
-func (f *fakeMealActions) AwaitCorrection(context.Context, string, int64) (bool, error) {
-	return false, nil
+
+func (f *fakeMealActions) AwaitCorrection(_ context.Context, mealID string, _ int64) (bool, error) {
+	f.edits = append(f.edits, mealID)
+	return true, nil
 }
-func (f *fakeMealActions) CancelCorrection(context.Context, string, int64) (bool, error) {
-	return false, nil
+
+func (f *fakeMealActions) CancelCorrection(_ context.Context, mealID string, _ int64) (bool, error) {
+	f.cancelled = append(f.cancelled, mealID)
+	return true, nil
 }
-func (f *fakeMealActions) Delete(context.Context, string, int64) (bool, error) { return false, nil }
+
+func (f *fakeMealActions) Delete(_ context.Context, mealID string, telegramUserID int64) (bool, error) {
+	if f.entry.ID != mealID || f.entry.TelegramUserID != telegramUserID {
+		return false, nil
+	}
+	f.deleted = append(f.deleted, mealID)
+	return true, nil
+}
+
 func (f *fakeMealActions) FindAwaitingCorrection(context.Context, int64, int64) (domain.MealEntry, domain.MealRevision, error) {
-	return domain.MealEntry{}, domain.MealRevision{}, domain.ErrMealNotFound
+	if f.entry.Status != domain.StatusAwaitingFix {
+		return domain.MealEntry{}, domain.MealRevision{}, domain.ErrMealNotFound
+	}
+	return f.entry, f.revision, nil
 }
 
 func yesterdayRouter(api API, repo *fakeMealActions, loc *time.Location) *Router {

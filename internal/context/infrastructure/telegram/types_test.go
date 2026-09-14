@@ -17,19 +17,19 @@ func TestBestPhoto(t *testing.T) {
 	}{
 		"largest variant within cap": {
 			photos: sizes(90, 320, 800, 1280, 2560),
-			want:   1280,
+			want:   800,
 		},
 		"all within cap picks largest": {
-			photos: sizes(90, 320, 800),
-			want:   800,
+			photos: sizes(90, 320),
+			want:   320,
 		},
 		"all oversized picks smallest": {
 			photos: sizes(2560, 1600, 4000),
 			want:   1600,
 		},
 		"order independent": {
-			photos: sizes(2560, 90, 1280, 320),
-			want:   1280,
+			photos: sizes(2560, 90, 800, 320),
+			want:   800,
 		},
 	}
 	for name, tc := range cases {

@@ -39,7 +39,7 @@ const markPendingQuery = `UPDATE meal_entries SET status='pending_confirmation' 
 const selectForActionQuery = `
 	SELECT e.id::text, e.user_id::text, u.telegram_user_id, e.chat_id, e.source_message_id,
 	       coalesce(e.bot_message_id, 0), coalesce(e.ephemeral_message_id, 0), e.status, e.meal_date, e.created_at,
-	       r.id::text, r.revision, r.user_text, r.correction_text, r.ai_request_json, r.ai_response_json,
+	       r.id::text, r.revision, r.user_text, r.correction_text, r.ai_response_json,
 	       r.summary, r.total_calories_kcal, r.total_protein_g, r.total_fat_g, r.total_carbs_g, r.confidence, r.created_at
 	FROM meal_entries e
 	JOIN users u ON u.id=e.user_id

@@ -45,8 +45,51 @@ func (r *Router) handleReadd(ctx context.Context, msg tg.Message) {
 		_, _ = r.notify(ctx, msg, render.ReaddNeedReply(), nil)
 		return
 	}
+	if original.From.ID != msg.From.ID {
+		_, _ = r.notify(ctx, msg, render.ReaddNotAuthor(), nil)
+		return
+	}
+	previous, err := r.actions.FindByMessage(ctx, msg.Chat.ID, original.MessageID)
+	if err != nil && !errors.Is(err, domain.ErrMealNotFound) {
+		r.log.Error("find meal for readd failed", "error", err, "chat_id", msg.Chat.ID)
+		return
+	}
+	if previous.Status.InFlight() {
+		_, _ = r.notify(ctx, msg, render.ReaddInProgress(), nil)
+		return
+	}
+
 	_, description := splitCommand(original.CommandText())
-	r.startMeal(ctx, *original, description, false)
+	author, ok := r.authorizeMeal(ctx, *original, description, false)
+	if !ok {
+		return
+	}
+	if reached, err := r.addMeal.LimitReached(ctx, author); err != nil {
+		r.log.Warn("check daily meal limit failed", "error", err)
+	} else if reached {
+		_, _ = r.notify(ctx, *original, render.MealDailyLimit(r.addMeal.DailyLimit()), nil)
+		return
+	}
+	if previous.ID != "" && !r.supersedeMeal(ctx, previous, msg) {
+		return
+	}
+	r.createMeal(ctx, *original, author, description)
+}
+
+func (r *Router) supersedeMeal(ctx context.Context, previous domain.MealEntry, msg tg.Message) bool {
+	if previous.Status == domain.StatusDeleted {
+		return true
+	}
+	ok, err := r.actions.Delete(ctx, previous.ID, msg.From.ID)
+	if err != nil {
+		r.log.Error("replace previous meal failed", "error", err, "meal_entry_id", previous.ID)
+	}
+	if err != nil || !ok {
+		_, _ = r.notify(ctx, msg, render.ReaddFailed(), nil)
+		return false
+	}
+	r.messenger.Deleted(ctx, previous)
+	return true
 }
 
 func (r *Router) handleYesterday(ctx context.Context, msg tg.Message) {
@@ -94,21 +137,32 @@ func dayBefore(t time.Time, loc *time.Location) time.Time {
 }
 
 func (r *Router) startMeal(ctx context.Context, source tg.Message, description string, quietIfUnregistered bool) {
+	author, ok := r.authorizeMeal(ctx, source, description, quietIfUnregistered)
+	if !ok {
+		return
+	}
+	r.createMeal(ctx, source, author, description)
+}
+
+func (r *Router) authorizeMeal(ctx context.Context, source tg.Message, description string, quietIfUnregistered bool) (usecase.AuthorizedAuthor, bool) {
 	author, err := r.addMeal.Authorize(ctx, source.From.ID)
 	if err != nil {
 		if !quietIfUnregistered || !errors.Is(err, domain.ErrNotFound) {
 			r.replyAddRejection(ctx, source, err)
 		}
-		return
+		return usecase.AuthorizedAuthor{}, false
 	}
 	if !r.requireSubscriber(ctx, source) {
-		return
+		return usecase.AuthorizedAuthor{}, false
 	}
 	if strings.TrimSpace(description) == "" && len(source.Photo) == 0 {
 		_, _ = r.notify(ctx, source, render.MealNeedContent(), nil)
-		return
+		return usecase.AuthorizedAuthor{}, false
 	}
+	return author, true
+}
 
+func (r *Router) createMeal(ctx context.Context, source tg.Message, author usecase.AuthorizedAuthor, description string) {
 	sourceMessageID := source.MessageID
 	if source.EphemeralMessageID != 0 {
 		sourceMessageID = 0

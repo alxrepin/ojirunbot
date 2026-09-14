@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"ojirun/internal/context/application/service"
 	"ojirun/internal/context/application/usecase"
 	"ojirun/internal/context/domain"
 	tg "ojirun/internal/context/infrastructure/telegram"
@@ -147,31 +148,90 @@ func TestHandleReaddNeedsReply(t *testing.T) {
 	}
 }
 
-func TestHandleReaddAuthorshipFromReplay(t *testing.T) {
-	api := &fakeAPI{}
-	users := &recordingUsers{err: domain.ErrUserNotFound}
-	addMeal := usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC)
-	r := newRouter(api, addMeal)
-
-	readd := tg.Message{
+func readdMessage(from int64) tg.Message {
+	return tg.Message{
 		MessageID: 5,
-		From:      &tg.User{ID: 99},
-		Chat:      tg.Chat{ID: 100, Type: "supergroup"},
+		From:      &tg.User{ID: from},
+		Chat:      tg.Chat{ID: -100, Type: "supergroup"},
 		ReplyToMessage: &tg.Message{
-			MessageID: 1,
+			MessageID: 2,
 			From:      &tg.User{ID: 42},
-			Chat:      tg.Chat{ID: 100, Type: "supergroup"},
+			Chat:      tg.Chat{ID: -100, Type: "supergroup"},
 			Photo:     []tg.PhotoSize{{FileID: "f", FileUniqueID: "u", Width: 1, Height: 1}},
 		},
 	}
+}
 
-	r.handleReadd(context.Background(), readd)
+func TestHandleReaddOnlyByAuthor(t *testing.T) {
+	api := &fakeAPI{}
+	users := &recordingUsers{user: domain.User{ID: "u1"}}
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r.actions = usecase.NewMealActions(&fakeMealActions{})
+
+	r.handleReadd(context.Background(), readdMessage(99))
+
+	if len(api.sent) != 1 || api.sent[0] != render.ReaddNotAuthor() {
+		t.Fatalf("a stranger's /readd must be refused, got %v", api.sent)
+	}
+	if users.gotID != 0 {
+		t.Fatalf("authorize should not run for a stranger, got id %d", users.gotID)
+	}
+}
+
+func TestHandleReaddAuthorshipFromReplay(t *testing.T) {
+	api := &fakeAPI{}
+	users := &recordingUsers{err: domain.ErrUserNotFound}
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r.actions = usecase.NewMealActions(&fakeMealActions{})
+
+	r.handleReadd(context.Background(), readdMessage(42))
 
 	if users.gotID != 42 {
 		t.Fatalf("authorized id = %d, want 42 (replayed author)", users.gotID)
 	}
 	if len(api.sent) != 1 || api.sent[0] != render.NeedRegister(r.botUsername) {
 		t.Fatalf("expected register hint for the replayed author, got %v", api.sent)
+	}
+}
+
+func TestHandleReaddWaitsForProcessing(t *testing.T) {
+	api := &fakeAPI{}
+	users := &recordingUsers{user: domain.User{ID: "u1"}}
+	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, 0, time.UTC))
+	r.actions = usecase.NewMealActions(&fakeMealActions{entry: domain.MealEntry{
+		ID: "m1", ChatID: -100, SourceMessageID: 2, TelegramUserID: 42, Status: domain.StatusAnalyzing,
+	}})
+
+	r.handleReadd(context.Background(), readdMessage(42))
+
+	if len(api.sent) != 1 || api.sent[0] != render.ReaddInProgress() || users.gotID != 0 {
+		t.Fatalf("an entry in flight must not be replaced, got %v (authorized %d)", api.sent, users.gotID)
+	}
+}
+
+func TestHandleReaddReplacesPreviousEntry(t *testing.T) {
+	api := &recordingAPI{fakeAPI: &fakeAPI{}}
+	r := newInputRouter(api, &inputSessions{})
+	queue := &fakeJobQueue{}
+	r.mealJobs = service.NewMealJobs(queue, nil, nil, nil)
+	previous := &fakeMealActions{entry: domain.MealEntry{
+		ID: "m1", ChatID: -100, SourceMessageID: 2, TelegramUserID: 42, Status: domain.StatusPending, EphemeralMessageID: 9,
+	}}
+	r.actions = usecase.NewMealActions(previous)
+
+	r.handleReadd(context.Background(), readdMessage(42))
+
+	if len(previous.deleted) != 1 || previous.deleted[0] != "m1" {
+		t.Fatalf("the previous entry should be deleted, got %v", previous.deleted)
+	}
+	if len(api.deleted) != 1 || api.deleted[0] != 9 {
+		t.Fatalf("the previous card should be removed, got %v", api.deleted)
+	}
+	if last := api.sent[len(api.sent)-1]; last != render.MealStageStatus(domain.StageReceived) {
+		t.Fatalf("expected a fresh status reply, got %v", api.sent)
+	}
+	if len(queue.enqueued) != 1 || queue.enqueued[0] != domain.JobMealAnalysis {
+		t.Fatalf("the analysis should be queued again, got %v", queue.enqueued)
 	}
 }
 

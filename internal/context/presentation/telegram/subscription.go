@@ -10,7 +10,12 @@ import (
 )
 
 func (r *Router) requireSubscriber(ctx context.Context, msg tg.Message) bool {
-	if r.subscription.IsSubscribed(ctx, msg.From.ID) {
+	subscribed, err := r.subscription.IsSubscribed(ctx, msg.From.ID)
+	if err != nil {
+		_, _ = r.notify(ctx, msg, render.SubscriptionCheckFailed(), nil)
+		return false
+	}
+	if subscribed {
 		return true
 	}
 	text := render.SubscribeRequiredGroup(r.channel.Label, r.channel.URL)
@@ -23,7 +28,12 @@ func (r *Router) requireSubscriber(ctx context.Context, msg tg.Message) bool {
 }
 
 func (r *Router) handleSubscriptionCheck(ctx context.Context, cb tg.CallbackQuery, answer *callbackAnswer) {
-	if !r.subscription.Recheck(ctx, cb.From.ID) {
+	subscribed, err := r.subscription.Recheck(ctx, cb.From.ID)
+	if err != nil {
+		answer.Alert(render.SubscriptionCheckFailed())
+		return
+	}
+	if !subscribed {
 		answer.Alert(render.SubscriptionNotFound())
 		return
 	}

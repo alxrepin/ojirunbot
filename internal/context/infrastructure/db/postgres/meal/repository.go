@@ -121,7 +121,7 @@ func (r *Repository) GetForAction(ctx context.Context, mealID string) (domain.Me
 	err := r.pool.QueryRow(ctx, selectForActionQuery, mealID).Scan(
 		&entry.ID, &entry.UserID, &entry.TelegramUserID, &entry.ChatID, &entry.SourceMessageID,
 		&entry.BotMessageID, &entry.EphemeralMessageID, &status, &entry.MealDate, &entry.CreatedAt,
-		&revision.ID, &revision.Revision, &revision.UserText, &revision.CorrectionText, &revision.AIRequestJSON, &revision.AIResponseJSON,
+		&revision.ID, &revision.Revision, &revision.UserText, &revision.CorrectionText, &revision.AIResponseJSON,
 		&revision.Summary, &revision.TotalCaloriesKCal, &revision.TotalProteinG, &revision.TotalFatG, &revision.TotalCarbsG, &revision.Confidence, &revision.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.MealEntry{}, domain.MealRevision{}, domain.ErrMealNotFound

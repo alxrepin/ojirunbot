@@ -2,9 +2,15 @@ package openrouter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -208,5 +214,34 @@ func TestNoRetryAfterContextCancelled(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("calls = %d, want 1 (no retries once context is done)", calls)
+	}
+}
+
+func TestStoredRequestReferencesPhotoInsteadOfBytes(t *testing.T) {
+	raw := []byte("not really a jpeg, but the client does not care")
+	path := filepath.Join(t.TempDir(), "meal.jpg")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var wire []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wire, _ = io.ReadAll(r.Body)
+		_, _ = w.Write([]byte(validEnvelope))
+	}))
+	defer srv.Close()
+
+	result, err := newTestClient(t, srv).AnalyzeNutrition(context.Background(), domain.AnalyzeRequest{Prompt: "prompt", ImagePath: path, ImageMime: "image/jpeg"})
+	if err != nil {
+		t.Fatalf("AnalyzeNutrition: %v", err)
+	}
+	dataURL := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(raw)
+	if !strings.Contains(string(wire), dataURL) {
+		t.Fatalf("the wire request must inline the photo, got %s", wire)
+	}
+	sum := sha256.Sum256(raw)
+	ref := "photo:sha256:" + hex.EncodeToString(sum[:])
+	stored := string(result.RequestJSON)
+	if strings.Contains(stored, "base64,") || !strings.Contains(stored, ref) || !strings.Contains(stored, `"model":"test-model"`) {
+		t.Fatalf("the stored request must name the model and reference the photo by hash, got %s", stored)
 	}
 }

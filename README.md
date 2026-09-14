@@ -51,7 +51,7 @@ tracks them against your daily target and sends you a breakdown of yesterday eve
 | `/profile` | DM | your data and daily target, with buttons to edit or recalculate |
 | `/settings` | DM | pick what to change — sex, weight, one macro target, the whole target or everything |
 | `/yesterday` | DM, group | reply to a meal to move it to the previous day |
-| `/readd` | DM, group | reply to a meal message to analyze it again |
+| `/readd` | DM, group | reply to your own meal message to analyze it again (replaces the previous entry) |
 | `/help` | DM, group | how it works |
 
 In a private chat the main actions are also on a persistent keyboard: «🍽 Добавить еду», «📊 Статистика», «👤 Профиль», «⚙️ Настройки», «💡 Как это работает?».

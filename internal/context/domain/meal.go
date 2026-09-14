@@ -52,6 +52,15 @@ func (s Status) IsTerminal() bool {
 	return s == StatusDeleted
 }
 
+func (s Status) InFlight() bool {
+	switch s {
+	case StatusReceived, StatusDownloadingPhoto, StatusAnalyzing, StatusReanalyzing:
+		return true
+	default:
+		return false
+	}
+}
+
 type MealStage int
 
 const (
