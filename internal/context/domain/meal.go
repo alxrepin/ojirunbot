@@ -18,6 +18,12 @@ type MealEntry struct {
 	CreatedAt          time.Time
 }
 
+const InFlightWindow = 15 * time.Minute
+
+func (e MealEntry) Processing(now time.Time) bool {
+	return e.Status.InFlight() && now.Sub(e.CreatedAt) < InFlightWindow
+}
+
 type MealLimits struct {
 	PerUserPerDay int
 	PerChatPerDay int

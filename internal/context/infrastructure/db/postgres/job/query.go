@@ -2,7 +2,7 @@ package job
 
 const enqueueQuery = `
 	INSERT INTO jobs (queue, kind, dedupe_key, payload_json, chat_id)
-	VALUES ($1, $2, nullif($3, ''), $4, nullif($5, 0))
+	VALUES ($1, $2, nullif($3, ''), $4, nullif($5::bigint, 0))
 	ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`
 
 const lockQueueQuery = `SELECT pg_advisory_xact_lock(hashtext('jobs:' || $1::text))`

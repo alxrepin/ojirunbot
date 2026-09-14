@@ -54,7 +54,7 @@ func (r *Router) handleReadd(ctx context.Context, msg tg.Message) {
 		r.log.Error("find meal for readd failed", "error", err, "chat_id", msg.Chat.ID)
 		return
 	}
-	if previous.Status.InFlight() {
+	if previous.Processing(time.Now()) {
 		_, _ = r.notify(ctx, msg, render.ReaddInProgress(), nil)
 		return
 	}

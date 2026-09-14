@@ -198,14 +198,24 @@ func TestHandleReaddWaitsForProcessing(t *testing.T) {
 	api := &fakeAPI{}
 	users := &recordingUsers{user: domain.User{ID: "u1"}}
 	r := newRouter(api, usecase.NewAddMeal(users, fakeProfiles{}, fakeMeals{}, domain.MealLimits{}, time.UTC))
-	r.actions = usecase.NewMealActions(&fakeMealActions{entry: domain.MealEntry{
-		ID: "m1", ChatID: -100, SourceMessageID: 2, TelegramUserID: 42, Status: domain.StatusAnalyzing,
-	}})
+	stuck := &fakeMealActions{entry: domain.MealEntry{
+		ID: "m1", ChatID: -100, SourceMessageID: 2, TelegramUserID: 42, Status: domain.StatusAnalyzing, CreatedAt: time.Now(),
+	}}
+	r.actions = usecase.NewMealActions(stuck)
 
 	r.handleReadd(context.Background(), readdMessage(42))
 
 	if len(api.sent) != 1 || api.sent[0] != render.ReaddInProgress() || users.gotID != 0 {
 		t.Fatalf("an entry in flight must not be replaced, got %v (authorized %d)", api.sent, users.gotID)
+	}
+
+	stuck.entry.CreatedAt = time.Now().Add(-domain.InFlightWindow - time.Minute)
+	replacing := newInputRouter(&recordingAPI{fakeAPI: &fakeAPI{}}, &inputSessions{})
+	replacing.actions = usecase.NewMealActions(stuck)
+	replacing.handleReadd(context.Background(), readdMessage(42))
+
+	if len(stuck.deleted) != 1 || stuck.deleted[0] != "m1" {
+		t.Fatalf("an entry stuck longer than the in-flight window should be replaced, got deleted %v", stuck.deleted)
 	}
 }
 
