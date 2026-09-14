@@ -10,7 +10,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/ojirun ./cmd/bot
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 RUN apk add --no-cache tzdata ca-certificates curl
 RUN addgroup -S app && adduser -S app -G app
