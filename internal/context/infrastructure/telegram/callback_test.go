@@ -39,6 +39,9 @@ func TestKeyboardUsesEncodedCallbacks(t *testing.T) {
 	if cb, ok := DecodeMealCallback(got); !ok || cb.Action != ActionAccept || cb.MealID != "m1" {
 		t.Fatalf("accept button callback not decodable: %q", got)
 	}
+	if kb.InlineKeyboard[0][0].Style != ButtonStyleSuccess {
+		t.Fatalf("accept button should be green, got %#v", kb.InlineKeyboard[0][0])
+	}
 }
 
 func TestRegCallbackRoundTrip(t *testing.T) {

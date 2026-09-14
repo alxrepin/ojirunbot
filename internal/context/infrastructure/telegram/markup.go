@@ -53,7 +53,7 @@ func MealKeyboard(mealID string) InlineKeyboardMarkup {
 	return InlineKeyboardMarkup{
 		InlineKeyboard: [][]InlineKeyboardButton{
 			{
-				{Text: "Принять", CallbackData: EncodeMealCallback(ActionAccept, mealID)},
+				{Text: "Принять", CallbackData: EncodeMealCallback(ActionAccept, mealID), Style: ButtonStyleSuccess},
 				{Text: "Редактировать", CallbackData: EncodeMealCallback(ActionEdit, mealID)},
 			},
 			{
