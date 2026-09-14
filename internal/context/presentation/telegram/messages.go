@@ -36,12 +36,27 @@ func (m *MealMessenger) Stage(ctx context.Context, entry domain.MealEntry, stage
 func (m *MealMessenger) Result(ctx context.Context, entry domain.MealEntry, view domain.MealResultView) {
 	text := render.MealResult(view)
 	opts := &tg.SendOptions{ReplyMarkup: tg.MealKeyboard(entry.ID)}
+	if !inGroup(entry.ChatID) && m.finalize(ctx, entry, text, opts, true) {
+		return
+	}
 	if err := m.updateRichMessage(ctx, entry, text, opts); err != nil {
 		m.log.Warn("update meal rich message failed, falling back to plain text", "error", err)
 		if err := m.updateMessage(ctx, entry, text, opts); err != nil {
 			m.log.Error("update meal message failed", "error", err)
 		}
 	}
+}
+
+func (m *MealMessenger) finalize(ctx context.Context, entry domain.MealEntry, text string, opts *tg.SendOptions, rich bool) bool {
+	previous := m.card(entry)
+	if err := m.send(ctx, &entry, text, opts, rich); err != nil {
+		m.log.Warn("send final meal message failed, falling back to editing the status", "error", err, "meal_entry_id", entry.ID)
+		return false
+	}
+	if err := deleteBotMessage(ctx, m.api, previous); err != nil {
+		m.log.Debug("delete meal status message failed", "error", err, "meal_entry_id", entry.ID)
+	}
+	return true
 }
 
 func (m *MealMessenger) Accepted(ctx context.Context, entry domain.MealEntry, view domain.MealResultView) {
@@ -79,11 +94,18 @@ func (m *MealMessenger) Deleted(ctx context.Context, entry domain.MealEntry) {
 }
 
 func (m *MealMessenger) Fail(ctx context.Context, entry domain.MealEntry, failure domain.MealFailure) {
-	_ = m.updateMessage(ctx, entry, render.MealFailureText(failure), nil)
+	m.conclude(ctx, entry, render.MealFailureText(failure))
 }
 
 func (m *MealMessenger) Discard(ctx context.Context, entry domain.MealEntry) {
-	_ = m.updateMessage(ctx, entry, render.MealNothingRecognized(), nil)
+	m.conclude(ctx, entry, render.MealNothingRecognized())
+}
+
+func (m *MealMessenger) conclude(ctx context.Context, entry domain.MealEntry, text string) {
+	if !inGroup(entry.ChatID) && m.finalize(ctx, entry, text, nil, false) {
+		return
+	}
+	_ = m.updateMessage(ctx, entry, text, nil)
 }
 
 func (m *MealMessenger) sendStatusReply(ctx context.Context, entry domain.MealEntry, text string) domain.MealEntry {
