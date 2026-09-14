@@ -1,0 +1,10 @@
+.env
+.idea/
+.DS_Store
+bin/
+storage/
+tmp/
+*.log
+.gocache/
+.gomodcache/
+nutrition_dump.sql
