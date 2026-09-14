@@ -182,11 +182,7 @@ func (r *Router) createMeal(ctx context.Context, source tg.Message, author useca
 	}
 	entry.TelegramUserID = source.From.ID
 
-	status := render.MealStageStatus(domain.StageReceived)
-	if backlog := r.mealBacklog(ctx); backlog > 0 {
-		status = render.MealQueued(backlog)
-	}
-	entry = r.messenger.sendStatusReply(ctx, entry, status)
+	entry = r.messenger.Received(ctx, entry, r.mealBacklog(ctx))
 
 	var photo domain.PhotoRef
 	if best, ok := source.BestPhoto(); ok {

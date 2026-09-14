@@ -29,7 +29,7 @@ func (r *Router) handleCorrection(ctx context.Context, msg tg.Message, text stri
 		return true
 	}
 	if backlog := r.mealBacklog(ctx); backlog > 0 {
-		_ = r.messenger.updateMessage(ctx, entry, render.MealQueued(backlog), nil)
+		r.messenger.Queued(ctx, entry, backlog)
 	}
 	if err := r.mealJobs.EnqueueCorrection(ctx, entry.ID, text); err != nil {
 		r.log.Error("enqueue meal correction failed", "error", err, "meal_entry_id", entry.ID)

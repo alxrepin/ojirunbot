@@ -24,13 +24,38 @@ func NewMealMessenger(api API, binder mealMessageBinder, log *slog.Logger) *Meal
 	return &MealMessenger{api: api, binder: binder, log: log}
 }
 
+func (m *MealMessenger) Received(ctx context.Context, entry domain.MealEntry, backlog int) domain.MealEntry {
+	if m.drafts(entry) {
+		m.sendDraft(ctx, entry, render.MealReceivedDraft(backlog))
+		return entry
+	}
+	text := render.MealStageStatus(domain.StageReceived)
+	if backlog > 0 {
+		text = render.MealQueued(backlog)
+	}
+	return m.sendStatusReply(ctx, entry, text)
+}
+
+func (m *MealMessenger) Queued(ctx context.Context, entry domain.MealEntry, backlog int) {
+	if m.drafts(entry) {
+		m.sendDraft(ctx, entry, render.MealReceivedDraft(backlog))
+		return
+	}
+	_ = m.updateMessage(ctx, entry, render.MealQueued(backlog), nil)
+}
+
 func (m *MealMessenger) Stage(ctx context.Context, entry domain.MealEntry, stage domain.MealStage) {
-	if !inGroup(entry.ChatID) {
+	if m.drafts(entry) {
 		m.sendDraft(ctx, entry, render.MealStageDraft(stage))
+		return
 	}
 	if stage != domain.StageReceived {
 		_ = m.updateMessage(ctx, entry, render.MealStageStatus(stage), nil)
 	}
+}
+
+func (m *MealMessenger) drafts(entry domain.MealEntry) bool {
+	return !inGroup(entry.ChatID) && mealDraftID(entry) != 0
 }
 
 func (m *MealMessenger) Result(ctx context.Context, entry domain.MealEntry, view domain.MealResultView) {

@@ -102,8 +102,14 @@ func TestGroupPhotoFromStrangerIsIgnored(t *testing.T) {
 
 func TestPrivateChatLogsMealsThroughQueue(t *testing.T) {
 	ctx := context.Background()
-	api := &recordingAPI{fakeAPI: &fakeAPI{}}
+	api := &draftingAPI{recordingAPI: &recordingAPI{fakeAPI: &fakeAPI{}}}
 	r := newInputRouter(api, &inputSessions{})
+	r.addMeal = usecase.NewAddMeal(
+		fakeUsers{user: domain.User{ID: "u1", TelegramUserID: 42}},
+		fakeProfiles{profile: domain.Profile{UserID: "u1"}},
+		fakeMeals{entry: domain.MealEntry{ID: "m1", ChatID: 42, SourceMessageID: 2}},
+		0, time.UTC,
+	)
 	queue := &fakeJobQueue{}
 	r.mealJobs = service.NewMealJobs(queue, nil, nil, nil)
 
@@ -116,8 +122,8 @@ func TestPrivateChatLogsMealsThroughQueue(t *testing.T) {
 	food.MessageID = 2
 	r.handlePrivateMessage(ctx, food)
 
-	if last := api.sent[len(api.sent)-1]; last != render.MealStageStatus(domain.StageReceived) {
-		t.Fatalf("expected the meal status reply, got %v", api.sent)
+	if len(api.sent) != 1 || len(api.drafts) != 1 || api.drafts[0] != render.MealReceivedDraft(0) {
+		t.Fatalf("a private meal gets a draft instead of a status message, got sent %v drafts %v", api.sent, api.drafts)
 	}
 	if len(queue.enqueued) != 1 || queue.enqueued[0] != domain.JobMealAnalysis {
 		t.Fatalf("the analysis should be queued, got %v", queue.enqueued)

@@ -42,6 +42,13 @@ func MealStageDraft(stage domain.MealStage) string {
 	}
 }
 
+func MealReceivedDraft(ahead int) string {
+	if ahead > 0 {
+		return mealThinkingDraft("⏳ В очереди", fmt.Sprintf("Перед вами %d…", ahead), "Разберу, как только освободится место")
+	}
+	return MealStageDraft(domain.StageReceived)
+}
+
 func MealFailureText(failure domain.MealFailure) string {
 	switch failure {
 	case domain.FailDownloadPhoto:

@@ -8,6 +8,45 @@ import (
 	"ojirun/internal/context/presentation/telegram/render"
 )
 
+type draftingAPI struct {
+	*recordingAPI
+	drafts []string
+}
+
+func (a *draftingAPI) SendRichHTMLDraft(_ context.Context, _ any, _ int64, html string) error {
+	a.drafts = append(a.drafts, html)
+	return nil
+}
+
+func TestPrivateProgressIsDraftOnly(t *testing.T) {
+	api := &draftingAPI{recordingAPI: &recordingAPI{fakeAPI: &fakeAPI{}}}
+	messenger := NewMealMessenger(api, &recordingBinder{}, discardLog())
+	entry := domain.MealEntry{ID: "m1", ChatID: 42, TelegramUserID: 42, SourceMessageID: 7}
+
+	entry = messenger.Received(context.Background(), entry, 0)
+	messenger.Stage(context.Background(), entry, domain.StageAnalyzing)
+	messenger.Queued(context.Background(), entry, 2)
+
+	if len(api.sent) != 0 || len(api.rich) != 0 || entry.BotMessageID != 0 {
+		t.Fatalf("private progress must not create messages, got sent %v rich %v entry %+v", api.sent, api.rich, entry)
+	}
+	if len(api.drafts) != 3 || api.drafts[0] != render.MealReceivedDraft(0) || api.drafts[1] != render.MealStageDraft(domain.StageAnalyzing) || api.drafts[2] != render.MealReceivedDraft(2) {
+		t.Fatalf("expected received, stage and queue drafts, got %v", api.drafts)
+	}
+}
+
+func TestGroupProgressIsEphemeralStatus(t *testing.T) {
+	api := &draftingAPI{recordingAPI: &recordingAPI{fakeAPI: &fakeAPI{}}}
+	messenger := NewMealMessenger(api, &recordingBinder{}, discardLog())
+	entry := domain.MealEntry{ID: "m1", ChatID: -100, TelegramUserID: 42, SourceMessageID: 7}
+
+	entry = messenger.Received(context.Background(), entry, 3)
+
+	if len(api.drafts) != 0 || len(api.sent) != 1 || api.sent[0] != render.MealQueued(3) || api.opts[0].Ephemeral == nil || entry.EphemeralMessageID == 0 {
+		t.Fatalf("group progress must be an ephemeral status message, got drafts %v sent %v entry %+v", api.drafts, api.sent, entry)
+	}
+}
+
 func TestPrivateResultReplacesStatusMessage(t *testing.T) {
 	api := &recordingAPI{fakeAPI: &fakeAPI{}}
 	binder := &recordingBinder{}
